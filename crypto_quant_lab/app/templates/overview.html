@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Overview Dashboard</h1>
+    <p class="page-subtitle">End-to-end quantitative research pipeline, live job progress, paper portfolio equity, and top-ranked strategies.</p>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <a href="/data" class="btn btn-secondary">01. Sync Market Data</a>
+    <a href="/discovery" class="btn btn-primary">03. Launch Discovery</a>
+  </div>
+</div>
+
+<div class="pipeline-grid" aria-label="Quantitative Workflow Pipeline">
+  <a href="/data" class="pipeline-step {% if stats.dataset_count > 0 %}done{% endif %}">
+    <div class="pipeline-step-kicker">Step 01</div>
+    <div class="pipeline-step-title">Market Data</div>
+    <div class="pipeline-step-meta">{{ stats.dataset_count }} dataset{{ "" if stats.dataset_count == 1 else "s" }}</div>
+  </a>
+  <a href="/research" class="pipeline-step {% if stats.regime_count > 0 %}done{% endif %}">
+    <div class="pipeline-step-kicker">Step 02</div>
+    <div class="pipeline-step-title">Quant Research</div>
+    <div class="pipeline-step-meta">{{ stats.regime_count }} analyzed</div>
+  </a>
+  <a href="/discovery" class="pipeline-step {% if stats.total_generated > 0 %}done{% endif %}">
+    <div class="pipeline-step-kicker">Step 03</div>
+    <div class="pipeline-step-title">Strategy Discovery</div>
+    <div class="pipeline-step-meta">{{ stats.total_generated }} strategies</div>
+  </a>
+  <a href="/backtesting" class="pipeline-step {% if stats.total_tested > 0 %}done{% endif %}">
+    <div class="pipeline-step-kicker">Step 04</div>
+    <div class="pipeline-step-title">Backtesting</div>
+    <div class="pipeline-step-meta">{{ stats.total_tested }} tested</div>
+  </a>
+  <a href="/validation" class="pipeline-step {% if stats.passed_validation > 0 %}done{% endif %}">
+    <div class="pipeline-step-kicker">Step 05</div>
+    <div class="pipeline-step-title">Validation</div>
+    <div class="pipeline-step-meta">{{ stats.passed_validation }} validated</div>
+  </a>
+  <a href="/paper-trading" class="pipeline-step {% if stats.active_paper > 0 or stats.portfolio_count > 0 %}done{% endif %}">
+    <div class="pipeline-step-kicker">Step 06</div>
+    <div class="pipeline-step-title">Portfolio &amp; Paper</div>
+    <div class="pipeline-step-meta">{{ stats.portfolio_count }} port · {{ stats.active_paper }} live</div>
+  </a>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-label">Strategies Generated</div>
+    <div class="kpi-value">{{ stats.total_generated }}</div>
+    <div class="kpi-meta">Unique canonical AST definitions</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Experiments Tested</div>
+    <div class="kpi-value">{{ stats.total_tested }}</div>
+    <div class="kpi-meta">Passed: {{ stats.passed_validation }} · Rejected: {{ stats.failed_validation }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Active Research &amp; Paper</div>
+    <div class="kpi-value">{{ stats.active_jobs }} / {{ stats.active_paper }}</div>
+    <div class="kpi-meta">Running jobs · Active paper strategies</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Paper Portfolio Equity</div>
+    <div class="kpi-value">${{ "{:,.2f}".format(stats.portfolio_equity) }}</div>
+    <div class="kpi-meta">Current drawdown: {{ stats.current_drawdown }}%</div>
+  </div>
+</div>
+
+<div class="two-col-grid">
+  <section class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Top Ranked Strategies</h2>
+      <a href="/leaderboard" class="btn btn-secondary btn-sm">Full Leaderboard</a>
+    </div>
+    {% if best_rows %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Strategy</th>
+              <th>Market</th>
+              <th>Tier</th>
+              <th class="num">Sharpe</th>
+              <th class="num">Max DD</th>
+              <th class="num">Score</th>
+              <th>Next</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in best_rows %}
+            <tr>
+              <td>
+                <div style="font-weight:600;">{{ row.strat.name }}</div>
+                <div class="text-muted" style="font-size:12px;">{{ row.strat.family }} · {{ row.strat.direction }}</div>
+              </td>
+              <td class="mono">{{ row.ds.symbol }} {{ row.ds.timeframe }}</td>
+              <td>
+                <span class="status-label {% if row.exp.validation_tier == 'VALIDATED' %}text-pos{% else %}text-warn{% endif %}">
+                  {{ row.exp.validation_tier }}
+                </span>
+              </td>
+              <td class="num">{{ "%.2f"|format(row.bt.sharpe_ratio) }}</td>
+              <td class="num text-neg">-{{ "%.1f"|format(row.bt.max_drawdown_pct) }}%</td>
+              <td class="num">{{ "%.2f"|format(row.exp.composite_score) }}</td>
+              <td style="white-space:nowrap;">
+                <a href="/backtesting?experiment_id={{ row.exp.id }}&autorun=1" class="btn btn-secondary btn-sm">Backtest</a>
+                <a href="/validation?experiment_id={{ row.exp.id }}" class="btn btn-secondary btn-sm">Validate</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        {% if stats.dataset_count > 0 %}
+          <p>You have {{ stats.dataset_count }} dataset{{ "" if stats.dataset_count == 1 else "s" }} ready. Run Quant Research or Strategy Discovery next.</p>
+          <div style="display:flex;gap:10px;justify-content:center;">
+            <a href="/research" class="btn btn-secondary btn-sm">02. Quant Research</a>
+            <a href="/discovery" class="btn btn-primary btn-sm">03. Launch Discovery</a>
+          </div>
+        {% else %}
+          <p>Start by downloading real historical candles from Binance in the Market Data Center.</p>
+          <a href="/data" class="btn btn-primary btn-sm">01. Download Binance Data</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Latest Research Activity</h2>
+      <a href="/discovery" class="btn btn-secondary btn-sm">Manage Jobs</a>
+    </div>
+    {% if latest_jobs %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th class="num">Progress</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for job in latest_jobs %}
+            <tr>
+              <td class="mono">{{ job.job_uid }}</td>
+              <td>{{ job.job_type }}</td>
+              <td>
+                <span class="status-label {% if job.status == 'completed' %}text-pos{% elif job.status == 'failed' %}text-neg{% else %}text-warn{% endif %}">
+                  {{ job.status.upper() }}
+                </span>
+              </td>
+              <td class="num">
+                <div>{{ "%.1f"|format(job.progress_pct) }}% ({{ job.completed_items }}/{{ job.total_items }})</div>
+                <div class="cql-progress-track"><div class="cql-progress-fill" style="width:{{ [job.progress_pct, 100]|min }}%;"></div></div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>No background discovery, validation, or download jobs have run yet.</p>
+      </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

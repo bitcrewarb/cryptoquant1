@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Validation Center</h1>
+    <p class="page-subtitle">Step 05 · Out-of-Sample testing (20% split), Walk-Forward, 1,000+ Monte Carlo simulations, CSCV PBO, Deflated Sharpe, and Stress Tests.</p>
+  </div>
+  <div id="val-next-cta" style="display:none;gap:10px;flex-wrap:wrap;">
+    <a id="val-paper-link" href="/paper-trading" class="btn btn-primary">Next: 06. Deploy Paper Trading</a>
+    <a href="/portfolio" class="btn btn-secondary">Build Portfolio</a>
+    <a href="/leaderboard" class="btn btn-secondary">Leaderboard</a>
+  </div>
+</div>
+
+<div id="val-processing" class="cql-processing-panel"></div>
+<div id="val-notice" class="notice-bar" style="display:none;"></div>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Run Complete Statistical Validation Suite</h2>
+  </div>
+  <form class="form-grid" onsubmit="return runValidation(event)">
+    <div class="field">
+      <label for="val-exp">Candidate Experiment</label>
+      <select id="val-exp" required onchange="syncTrialCount()">
+        {% for item in experiments %}
+          <option value="{{ item.exp.id }}" data-trials="{{ item.n_trials }}" {% if selected_experiment_id == item.exp.id %}selected{% endif %}>{{ item.strat.name }} ({{ item.ds.symbol }} {{ item.ds.timeframe }} · {{ item.exp.validation_tier }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="val-mc">Monte Carlo Runs</label>
+      <input id="val-mc" type="number" value="1000" min="100" max="10000" />
+    </div>
+    <div class="field">
+      <label for="val-wf-mode">Walk-Forward Mode</label>
+      <select id="val-wf-mode">
+        <option value="rolling">Rolling Window</option>
+        <option value="expanding">Expanding Window</option>
+        <option value="anchored">Anchored Window</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="val-wf-win">WF Windows</label>
+      <input id="val-wf-win" type="number" value="5" min="3" max="12" />
+    </div>
+    <div class="field">
+      <label for="val-trials">Attempted Trials (DSR N)</label>
+      <input id="val-trials" type="number" value="100" min="1" />
+    </div>
+    <div>
+      <button id="val-submit-btn" type="submit" class="btn btn-primary" style="width:100%;">Run Validation Suite</button>
+    </div>
+  </form>
+</section>
+
+<div id="val-output" style="display:none;">
+  <div class="kpi-grid" id="val-kpis"></div>
+  <div class="two-col-grid">
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Monte Carlo Equity Paths (Sample)</h2></div>
+      <div id="val-mc-chart" class="chart-box"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Walk-Forward OOS Window Consistency</h2></div>
+      <div id="val-wf-chart" class="chart-box"></div>
+    </section>
+  </div>
+  <div class="two-col-grid">
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Stress Testing Scenarios</h2></div>
+      <div id="val-stress-table" class="table-wrap"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Rejection Gates &amp; Dimension Scores</h2></div>
+      <div id="val-gate-details"></div>
+    </section>
+  </div>
+</div>
+
+<section class="panel">
+  <div class="panel-header"><h2 class="panel-title">Recent Validation Runs</h2></div>
+  {% if recent_validations %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th>Market</th>
+            <th class="num">OOS Sharpe</th>
+            <th class="num">OOS Return</th>
+            <th class="num">OOS Max DD</th>
+            <th class="num">CSCV PBO</th>
+            <th class="num">Deflated Sharpe</th>
+            <th class="num">Stress Survival</th>
+            <th>Gate Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in recent_validations %}
+          {% set v = row.val %}
+          <tr>
+            <td style="font-weight:600;">{{ row.strategy_name }}</td>
+            <td class="mono">{{ row.market }}</td>
+            <td class="num">{{ "%.2f"|format(v.oos_sharpe) }}</td>
+            <td class="num">{{ "%.2f"|format(v.oos_return_pct) }}%</td>
+            <td class="num text-neg">-{{ "%.1f"|format(v.oos_max_drawdown_pct) }}%</td>
+            <td class="num">{{ "%.3f"|format(v.pbo_score or 0) }}</td>
+            <td class="num">{{ "%.3f"|format(v.deflated_sharpe or 0) }}</td>
+            <td class="num">{{ "%.0f"|format(v.stress_survival_rate * 100) }}%</td>
+            <td><span class="status-label {% if v.passed_gates %}text-pos{% else %}text-neg{% endif %}">{{ "PASSED" if v.passed_gates else "REJECTED" }}</span></td>
+            <td style="white-space:nowrap;">
+              <a href="/backtesting?experiment_id={{ v.experiment_id }}" class="btn btn-secondary btn-sm">Backtest</a>
+              <a href="/paper-trading?experiment_id={{ v.experiment_id }}" class="btn btn-secondary btn-sm">Paper</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">No validation suites executed yet. Select a candidate experiment above and click Run Validation Suite.</div>
+  {% endif %}
+</section>
+
+<script>
+function syncTrialCount() {
+  const sel = document.getElementById("val-exp");
+  const opt = sel && sel.options[sel.selectedIndex];
+  if (opt && opt.dataset.trials) {
+    document.getElementById("val-trials").value = opt.dataset.trials;
+  }
+}
+
+async function runValidation(e) {
+  if (e) e.preventDefault();
+  const expEl = document.getElementById("val-exp");
+  if (!expEl.value) return showNotice("val-notice", "No candidate experiments available. Run Strategy Discovery first.", "error");
+  const btn = document.getElementById("val-submit-btn");
+  const expId = parseInt(expEl.value, 10);
+  const mcRuns = parseInt(document.getElementById("val-mc").value, 10);
+  const wfWins = parseInt(document.getElementById("val-wf-win").value, 10);
+
+  hideNotice("val-notice");
+  setButtonLoading(btn, true, "Validating...");
+  showProcessing("val-processing", `Running full statistical validation suite (${mcRuns} Monte Carlo sims, ${wfWins} WF windows)`, [
+    "Event-driven Out-of-Sample simulation",
+    "Walk-Forward window optimization & consistency",
+    "Monte Carlo trade permutation & ruin analysis",
+    "CSCV PBO, Parameter Stability & Deflated Sharpe",
+    "5 Stress Scenarios & Hard Rejection Gates"
+  ]);
+
+  try {
+    const res = await apiJson("/api/validation/run", "POST", {
+      experiment_id: expId,
+      mc_simulations: mcRuns,
+      wf_mode: document.getElementById("val-wf-mode").value,
+      wf_windows: wfWins,
+      n_trials_attempted: parseInt(document.getElementById("val-trials").value, 10),
+    });
+    document.getElementById("val-output").style.display = "block";
+    document.getElementById("val-next-cta").style.display = "flex";
+    document.getElementById("val-paper-link").href = `/paper-trading?experiment_id=${expId}`;
+    showNotice("val-notice", `Validation complete: Tier = ${res.validation_tier} | Composite Score = ${res.ranking.composite_score}`, res.ranking.passed_gates ? "success" : "warning");
+
+    document.getElementById("val-kpis").innerHTML = `
+      <div class="kpi-card"><div class="kpi-label">OOS Sharpe / Return</div><div class="kpi-value">${res.oos_metrics.sharpe_ratio} / ${res.oos_metrics.return_on_capital_pct}%</div><div class="kpi-meta">Trades: ${res.oos_metrics.total_trades} · Max DD: ${res.oos_metrics.max_drawdown_pct}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">CSCV PBO / DSR</div><div class="kpi-value">${res.stability.cscv_pbo.pbo} / ${res.dsr.dsr}</div><div class="kpi-meta">Param Stability: ${(res.stability.stability_score * 100).toFixed(0)}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Monte Carlo Median / Ruin</div><div class="kpi-value">${res.monte_carlo.median_return_pct}% / ${(res.monte_carlo.ruin_probability * 100).toFixed(1)}%</div><div class="kpi-meta">P05: ${res.monte_carlo.p05_return_pct}% · P95 DD: ${res.monte_carlo.p95_max_dd_pct}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Composite Rank Score</div><div class="kpi-value ${res.ranking.passed_gates ? 'text-pos' : 'text-neg'}">${res.ranking.composite_score}</div><div class="kpi-meta">${res.ranking.passed_gates ? 'PASSED ALL GATES' : 'REJECTED BY GATES'}</div></div>
+    `;
+
+    const mcTraces = res.monte_carlo.sample_paths.map((p, idx) => ({
+      y: p, type: "scatter", mode: "lines", line: { width: 1, color: idx === 0 ? "#10b981" : "rgba(56,189,248,0.28)" }, showlegend: false
+    }));
+    Plotly.newPlot("val-mc-chart", mcTraces, plotlyDarkLayout(`Monte Carlo (${res.monte_carlo.simulations} sims)`, "Equity"), { responsive: true });
+
+    Plotly.newPlot("val-wf-chart", [
+      { x: res.walk_forward.windows.map(w => `W${w.window}`), y: res.walk_forward.windows.map(w => w.is_sharpe), name: "IS Sharpe", type: "bar", marker: { color: "#334155" } },
+      { x: res.walk_forward.windows.map(w => `W${w.window}`), y: res.walk_forward.windows.map(w => w.oos_sharpe), name: "OOS Sharpe", type: "bar", marker: { color: "#10b981" } }
+    ], plotlyDarkLayout(`Walk-Forward (${res.walk_forward.mode}) Consistency ${res.walk_forward.consistency_pct}%`, "Sharpe"), { responsive: true });
+
+    document.getElementById("val-stress-table").innerHTML = `
+      <table class="data-table"><thead><tr><th>Scenario</th><th class="num">Return %</th><th class="num">Sharpe</th><th class="num">Max DD %</th><th>Status</th></tr></thead>
+      <tbody>${res.stress.scenarios.map(s => `
+        <tr><td>${escapeHtml(s.scenario)}</td><td class="num">${s.return_pct}%</td><td class="num">${s.sharpe}</td><td class="num">${s.max_drawdown_pct}%</td>
+        <td class="${s.survived ? 'text-pos' : 'text-neg'} mono">${s.survived ? 'SURVIVED' : 'FAILED'}</td></tr>
+      `).join("")}</tbody></table>
+    `;
+
+    const reasonsHtml = res.ranking.rejection_reasons.length
+      ? `<div class="text-neg" style="margin-bottom:12px;"><strong>Rejection Reasons:</strong><ul>${res.ranking.rejection_reasons.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ul></div>`
+      : `<div class="text-pos" style="margin-bottom:12px;font-weight:600;">All Hard Statistical Gates Passed</div>`;
+    const dimHtml = Object.entries(res.ranking.dimension_scores).map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td class="num">${v}/100</td></tr>`).join("");
+    document.getElementById("val-gate-details").innerHTML = `${reasonsHtml}<table class="data-table"><tbody>${dimHtml}</tbody></table>`;
+  } catch (err) {
+    showNotice("val-notice", err.message, "error");
+  } finally {
+    hideProcessing("val-processing");
+    setButtonLoading(btn, false);
+  }
+  return false;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  syncTrialCount();
+  {% if autorun == 1 and experiments %}
+    runValidation();
+  {% endif %}
+});
+</script>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Experiment History</h1>
+    <p class="page-subtitle">Reproducible audit trail with strategy AST definitions, dataset versions, random seeds, software versions, and CSV/JSON exports.</p>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <a href="/discovery" class="btn btn-primary">Launch New Discovery</a>
+  </div>
+</div>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Recorded Experiments ({{ rows|length }})</h2>
+    {% if rows %}
+      <input id="exp-search" type="text" placeholder="Filter by strategy, symbol, or UID..." oninput="filterExperiments(this.value)" style="min-width:260px;" />
+    {% endif %}
+  </div>
+  {% if rows %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Experiment UID</th>
+            <th>Strategy</th>
+            <th>Dataset</th>
+            <th>Algorithm</th>
+            <th class="num">Seed</th>
+            <th>Tier</th>
+            <th class="num">Sharpe</th>
+            <th class="num">Max DD</th>
+            <th>Actions &amp; Exports</th>
+          </tr>
+        </thead>
+        <tbody id="exp-tbody">
+          {% for r in rows %}
+          <tr class="exp-row" data-search="{{ r.exp.experiment_uid|lower }} {{ r.strat.name|lower }} {{ r.strat.family|lower }} {{ r.ds.symbol|lower }} {{ r.exp.validation_tier|lower }}">
+            <td class="mono">{{ r.exp.experiment_uid }}</td>
+            <td>
+              <div style="font-weight:600;">{{ r.strat.name }}</div>
+              <div class="text-muted" style="font-size:12px;">{{ r.strat.family }} · v{{ r.exp.software_version }}</div>
+            </td>
+            <td class="mono">{{ r.ds.symbol }} {{ r.ds.timeframe }} (v{{ r.ds.version }})</td>
+            <td>{{ r.exp.search_algorithm }}</td>
+            <td class="num">{{ r.exp.random_seed }}</td>
+            <td><span class="status-label {% if r.exp.validation_tier == 'VALIDATED' %}text-pos{% else %}text-warn{% endif %}">{{ r.exp.validation_tier }}</span></td>
+            <td class="num">{% if r.bt %}{{ "%.2f"|format(r.bt.sharpe_ratio) }}{% else %}-{% endif %}</td>
+            <td class="num text-neg">{% if r.bt %}-{{ "%.1f"|format(r.bt.max_drawdown_pct) }}%{% else %}-{% endif %}</td>
+            <td style="white-space:nowrap;">
+              <a href="/backtesting?experiment_id={{ r.exp.id }}&autorun=1" class="btn btn-secondary btn-sm">Backtest</a>
+              <a href="/validation?experiment_id={{ r.exp.id }}" class="btn btn-primary btn-sm">Validate</a>
+              <a href="/api/experiments/{{ r.exp.id }}/export.json" class="btn btn-secondary btn-sm">JSON</a>
+              <a href="/api/experiments/{{ r.exp.id }}/export.csv" class="btn btn-secondary btn-sm">CSV</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <p>No reproducible experiments stored yet. Run Strategy Discovery to generate and evaluate candidate strategies.</p>
+      <a href="/discovery" class="btn btn-primary btn-sm">03. Launch Discovery</a>
+    </div>
+  {% endif %}
+</section>
+
+<script>
+function filterExperiments(q) {
+  const needle = (q || "").trim().toLowerCase();
+  document.querySelectorAll(".exp-row").forEach(row => {
+    row.style.display = !needle || (row.dataset.search || "").includes(needle) ? "" : "none";
+  });
+}
+</script>
+{% endblock %}

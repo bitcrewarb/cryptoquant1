@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Paper Trading Terminal</h1>
+    <p class="page-subtitle">Live Binance public market feed execution, persistent virtual positions across restarts, risk enforcement, and optional encrypted live-API vault.</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;">
+      <input id="pt-autorefresh" type="checkbox" onchange="toggleAutoRefresh(this.checked)" /> Auto-refresh (20s)
+    </label>
+    <button id="pt-step-btn" type="button" class="btn btn-primary" onclick="stepPaper(this)">Execute Live Feed Cycle Now</button>
+    <button id="pt-kill-btn" type="button" class="btn btn-danger" onclick="triggerKillSwitch(this)">Emergency Kill Switch</button>
+  </div>
+</div>
+
+<div id="pt-processing" class="cql-processing-panel"></div>
+<div id="pt-notice" class="notice-bar" style="display:none;"></div>
+
+<div class="two-col-grid">
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Deploy Strategy to Paper Trading</h2></div>
+    <form class="form-grid" onsubmit="return deployPaper(event)">
+      <div class="field">
+        <label for="pt-exp">Strategy Experiment</label>
+        <select id="pt-exp" required onchange="syncPaperDefaults()">
+          {% for item in experiments %}
+            <option value="{{ item.exp.id }}" data-sym="{{ item.ds.symbol }}" data-tf="{{ item.ds.timeframe }}" {% if selected_experiment_id == item.exp.id %}selected{% endif %}>{{ item.strat.name }} ({{ item.ds.symbol }} {{ item.ds.timeframe }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="pt-sym">Symbol</label>
+        <select id="pt-sym">
+          <option value="BTCUSDT">BTCUSDT</option>
+          <option value="ETHUSDT">ETHUSDT</option>
+          <option value="SOLUSDT">SOLUSDT</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="pt-tf">Timeframe</label>
+        <select id="pt-tf">
+          <option value="1m">1m</option>
+          <option value="5m">5m</option>
+          <option value="15m">15m</option>
+          <option value="1h" selected>1h</option>
+          <option value="4h">4h</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="pt-cap">Allocated Capital (USDT)</label>
+        <input id="pt-cap" type="number" value="10000" min="100" />
+      </div>
+      <div>
+        <button id="pt-deploy-btn" type="submit" class="btn btn-primary" style="width:100%;">Deploy Paper Strategy</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Optional Live Exchange API Vault (Disabled by Default)</h2>
+      <span class="status-label {% if global_live_flag %}text-warn{% else %}text-muted{% endif %}">
+        LIVE MODE: {{ "UNLOCKED IN ENV" if global_live_flag else "LOCKED (PAPER DEFAULT)" }}
+      </span>
+    </div>
+    <form class="form-grid" onsubmit="return saveLiveCreds(event)">
+      <div class="field"><label for="lv-label">Config Label</label><input id="lv-label" type="text" placeholder="binance_main" required /></div>
+      <div class="field"><label for="lv-scope">Permissions</label>
+        <select id="lv-scope">
+          <option value="read_only">Read-Only</option>
+          <option value="spot_trade">Spot Trading Only (No Withdraw)</option>
+          <option value="futures_trade">Futures Trading Only (No Withdraw)</option>
+        </select>
+      </div>
+      <div class="field"><label for="lv-key">API Key (Encrypted at Rest)</label><input id="lv-key" type="password" required minlength="8" /></div>
+      <div class="field"><label for="lv-sec">API Secret (Encrypted at Rest)</label><input id="lv-sec" type="password" required minlength="8" /></div>
+      <div class="field"><label for="lv-cap">Max Capital Limit (USDT)</label><input id="lv-cap" type="number" value="1000" min="0" /></div>
+      <div><button id="lv-save-btn" type="submit" class="btn btn-secondary" style="width:100%;">Store Encrypted Keys</button></div>
+    </form>
+  </section>
+</div>
+
+<section class="panel">
+  <div class="panel-header"><h2 class="panel-title">Active Paper Strategies &amp; Virtual Positions</h2></div>
+  {% if positions %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Exp ID</th>
+            <th>Market</th>
+            <th>Status</th>
+            <th>Side</th>
+            <th class="num">Qty</th>
+            <th class="num">Entry / Mark</th>
+            <th class="num">Realized PnL</th>
+            <th class="num">Unrealized PnL</th>
+            <th class="num">Max DD</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in positions %}
+          <tr>
+            <td class="num">{{ p.experiment_id }}</td>
+            <td class="mono">{{ p.symbol }} {{ p.timeframe }} ({{ p.market_type }})</td>
+            <td><span class="status-label {% if p.is_active %}text-pos{% else %}text-muted{% endif %}">{{ "ACTIVE" if p.is_active else "PAUSED" }}</span></td>
+            <td class="mono">{{ p.side }}</td>
+            <td class="num">{{ "%.5f"|format(p.quantity) }}</td>
+            <td class="num">{{ "%.2f"|format(p.entry_price) }} / {{ "%.2f"|format(p.mark_price) }}</td>
+            <td class="num {% if p.realized_pnl >= 0 %}text-pos{% else %}text-neg{% endif %}">${{ "%.2f"|format(p.realized_pnl) }}</td>
+            <td class="num {% if p.unrealized_pnl >= 0 %}text-pos{% else %}text-neg{% endif %}">${{ "%.2f"|format(p.unrealized_pnl) }}</td>
+            <td class="num text-neg">-{{ "%.2f"|format(p.max_drawdown_pct) }}%</td>
+            <td style="white-space:nowrap;">
+              {% if p.side != 'FLAT' %}
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closePos({{ p.id }}, this)">Close Pos</button>
+              {% endif %}
+              {% if p.is_active %}
+                <button type="button" class="btn btn-danger btn-sm" onclick="stopPos({{ p.id }}, this)">Stop</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">No strategies currently deployed to paper trading.</div>
+  {% endif %}
+</section>
+
+<div class="two-col-grid">
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Paper Orders &amp; Trade History</h2></div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Order UID</th><th>Symbol</th><th>Side</th><th class="num">Qty</th><th class="num">Fill</th><th class="num">Fee</th></tr></thead>
+        <tbody>
+          {% for o in orders %}
+          <tr>
+            <td class="mono">{{ o.order_uid }}</td><td>{{ o.symbol }}</td><td class="mono">{{ o.side }}</td>
+            <td class="num">{{ "%.5f"|format(o.quantity) }}</td><td class="num">{{ "%.2f"|format(o.fill_price or 0) }}</td><td class="num">${{ "%.2f"|format(o.fee_paid) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="empty-state">No paper orders executed yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Paper Execution Logs</h2></div>
+    <div class="table-wrap" style="max-height:320px;overflow-y:auto;">
+      <table class="data-table">
+        <thead><tr><th>Time (UTC)</th><th>Level</th><th>Message</th></tr></thead>
+        <tbody>
+          {% for lg in logs %}
+          <tr>
+            <td class="mono" style="font-size:11px;">{{ lg.created_at.strftime('%m-%d %H:%M:%S') }}</td>
+            <td class="mono">{{ lg.level }}</td>
+            <td>{{ lg.message }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="empty-state">No paper execution events recorded yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+let _ptRefreshTimer = null;
+
+function syncPaperDefaults() {
+  const sel = document.getElementById("pt-exp");
+  const opt = sel && sel.options[sel.selectedIndex];
+  if (!opt) return;
+  if (opt.dataset.sym) {
+    const symSel = document.getElementById("pt-sym");
+    if (Array.from(symSel.options).some(o => o.value === opt.dataset.sym)) symSel.value = opt.dataset.sym;
+  }
+  if (opt.dataset.tf) {
+    const tfSel = document.getElementById("pt-tf");
+    if (Array.from(tfSel.options).some(o => o.value === opt.dataset.tf)) tfSel.value = opt.dataset.tf;
+  }
+}
+
+function toggleAutoRefresh(enabled) {
+  if (_ptRefreshTimer) {
+    clearInterval(_ptRefreshTimer);
+    _ptRefreshTimer = null;
+  }
+  if (enabled) {
+    sessionStorage.setItem("cql_pt_autorefresh", "1");
+    _ptRefreshTimer = setInterval(() => location.reload(), 20000);
+  } else {
+    sessionStorage.removeItem("cql_pt_autorefresh");
+  }
+}
+
+async function deployPaper(e) {
+  e.preventDefault();
+  const expEl = document.getElementById("pt-exp");
+  if (!expEl.value) return showNotice("pt-notice", "Discover or select a strategy experiment first.", "error");
+  const btn = document.getElementById("pt-deploy-btn");
+  setButtonLoading(btn, true, "Deploying...");
+  try {
+    await apiJson("/api/paper/deploy", "POST", {
+      experiment_id: parseInt(expEl.value, 10),
+      symbol: document.getElementById("pt-sym").value,
+      timeframe: document.getElementById("pt-tf").value,
+      allocated_capital: parseFloat(document.getElementById("pt-cap").value),
+    });
+    showNotice("pt-notice", "Strategy deployed to live paper trading.", "success");
+    setTimeout(() => location.reload(), 600);
+  } catch (err) {
+    showNotice("pt-notice", err.message, "error");
+    setButtonLoading(btn, false);
+  }
+  return false;
+}
+
+async function stepPaper(btn) {
+  setButtonLoading(btn, true, "Syncing Feed...");
+  showProcessing("pt-processing", "Streaming latest closed Binance candles & evaluating signals", [
+    "Fetching live Binance market feed",
+    "Checking RiskManager limits & idempotency keys",
+    "Updating virtual positions & mark-to-market PnL"
+  ]);
+  try {
+    const res = await apiJson("/api/paper/step", "POST");
+    showNotice("pt-notice", `Synced Binance live feed: ${res.active_strategies} active · ${res.orders_executed} orders executed.`, "success");
+    setTimeout(() => location.reload(), 650);
+  } catch (err) {
+    showNotice("pt-notice", err.message, "error");
+  } finally {
+    hideProcessing("pt-processing");
+    setButtonLoading(btn, false);
+  }
+}
+
+async function closePos(id, btn) {
+  setButtonLoading(btn, true, "Closing...");
+  try {
+    await apiJson(`/api/paper/positions/${id}/close`, "POST");
+    location.reload();
+  } catch (err) {
+    showNotice("pt-notice", err.message, "error");
+    setButtonLoading(btn, false);
+  }
+}
+
+async function stopPos(id, btn) {
+  setButtonLoading(btn, true, "Stopping...");
+  try {
+    await apiJson(`/api/paper/positions/${id}/stop`, "POST");
+    location.reload();
+  } catch (err) {
+    showNotice("pt-notice", err.message, "error");
+    setButtonLoading(btn, false);
+  }
+}
+
+async function triggerKillSwitch(btn) {
+  setButtonLoading(btn, true, "Halting...");
+  try {
+    await apiJson("/api/live/kill-switch", "POST");
+    showNotice("pt-notice", "Emergency Kill Switch triggered. All live exchange configs disabled.", "error");
+  } catch (err) {
+    showNotice("pt-notice", err.message, "error");
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+async function saveLiveCreds(e) {
+  e.preventDefault();
+  const btn = document.getElementById("lv-save-btn");
+  setButtonLoading(btn, true, "Encrypting...");
+  try {
+    const res = await apiJson("/api/live/credentials", "POST", {
+      label: document.getElementById("lv-label").value,
+      permissions_scope: document.getElementById("lv-scope").value,
+      api_key: document.getElementById("lv-key").value,
+      api_secret: document.getElementById("lv-sec").value,
+      max_capital_usdt: parseFloat(document.getElementById("lv-cap").value),
+    });
+    showNotice("pt-notice", `Encrypted API credentials saved for ${res.label} (live_trading_enabled=${res.live_trading_enabled}).`, "success");
+  } catch (err) {
+    showNotice("pt-notice", err.message, "error");
+  } finally {
+    setButtonLoading(btn, false);
+  }
+  return false;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  syncPaperDefaults();
+  if (sessionStorage.getItem("cql_pt_autorefresh") === "1") {
+    const chk = document.getElementById("pt-autorefresh");
+    if (chk) chk.checked = true;
+    toggleAutoRefresh(true);
+  }
+});
+</script>
+{% endblock %}

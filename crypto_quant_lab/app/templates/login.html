@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In · CRYPTO QUANT LAB</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/terminal.css" />
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;">
+  <div id="cql-top-loader" class="cql-top-loader" aria-hidden="true"><div class="cql-top-loader-bar"></div></div>
+  <div class="panel" style="width:100%;max-width:440px;padding:28px;">
+    <div style="margin-bottom:20px;">
+      <div style="font-weight:700;font-size:16px;letter-spacing:0.04em;color:#10b981;">CRYPTO QUANT LAB</div>
+      <h1 style="margin:8px 0 4px 0;font-size:22px;font-weight:700;">
+        {% if first_run %}Initialize Administrator Account{% else %}Research Terminal Sign In{% endif %}
+      </h1>
+      <p class="page-subtitle">
+        {% if first_run %}
+          First-run setup: create the primary administrator account to unlock the quantitative research workspace.
+        {% else %}
+          Authenticate to access market datasets, strategy discovery, statistical validation, and paper trading.
+        {% endif %}
+      </p>
+    </div>
+
+    {% if cookie_blocked %}
+      <div class="notice-bar" style="border-color:#f59e0b;color:#fde68a;margin-bottom:16px;">
+        <div style="font-weight:600;margin-bottom:6px;">Browser blocked the login cookie inside this embedded preview.</div>
+        <div style="font-size:12px;line-height:1.5;margin-bottom:10px;">
+          Allow third-party cookies for this site, or open CRYPTO QUANT LAB directly in a dedicated browser tab:
+        </div>
+        <a href="/login" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" style="display:inline-block;text-decoration:none;">Open Terminal in New Tab</a>
+      </div>
+    {% endif %}
+
+    {% if error %}
+      <div class="notice-bar" style="border-color:#ef4444;color:#fca5a5;">{{ error }}</div>
+    {% endif %}
+
+    {% if first_run %}
+      <form id="auth-form" method="post" action="/auth/claim-admin" style="display:flex;flex-direction:column;gap:14px;">
+        <div class="field">
+          <label for="username">Administrator Username</label>
+          <input id="username" name="username" type="text" required minlength="3" placeholder="quant_admin" />
+        </div>
+        <div class="field">
+          <label for="email">Email (Optional)</label>
+          <input id="email" name="email" type="email" placeholder="research@desk.local" />
+        </div>
+        <div class="field">
+          <label for="password">Password (minimum 8 characters)</label>
+          <input id="password" name="password" type="password" required minlength="8" />
+        </div>
+        <button id="auth-submit" type="submit" class="btn btn-primary" style="margin-top:6px;">Create Administrator &amp; Enter Terminal</button>
+      </form>
+    {% else %}
+      <form id="auth-form" method="post" action="/auth/login" style="display:flex;flex-direction:column;gap:14px;">
+        <div class="field">
+          <label for="username">Username or Email</label>
+          <input id="username" name="username" type="text" required placeholder="admin or email" />
+        </div>
+        <div class="field">
+          <label for="password">Password{% if has_env_passcode %} or Admin Passcode{% endif %}</label>
+          <input id="password" name="password" type="password" required />
+        </div>
+        <button id="auth-submit" type="submit" class="btn btn-primary" style="margin-top:6px;">Sign In</button>
+      </form>
+    {% endif %}
+  </div>
+  <script>
+    const authForm = document.getElementById("auth-form");
+    if (authForm) {
+      authForm.addEventListener("submit", () => {
+        const btn = document.getElementById("auth-submit");
+        const loader = document.getElementById("cql-top-loader");
+        if (loader) loader.classList.add("active");
+        if (btn) {
+          btn.disabled = true;
+          btn.classList.add("is-loading");
+          btn.innerHTML = '<span class="cql-spinner" aria-hidden="true"></span><span>Authenticating...</span>';
+        }
+      });
+    }
+  </script>
+</body>
+</html>

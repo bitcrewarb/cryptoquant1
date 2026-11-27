@@ -1,0 +1,1579 @@
+# MASTER DEVELOPMENT PROMPT
+# BUILD A COMPLETE INSTITUTIONAL-GRADE CRYPTO QUANTITATIVE RESEARCH & TRADING PLATFORM
+
+## 1. YOUR ROLE
+
+Act as a senior quantitative researcher, quantitative developer, algorithmic trading engineer, financial mathematician, Python architect, database engineer, and professional web application developer.
+
+Your task is to DESIGN, DEVELOP, TEST, AND DELIVER a complete, functional, production-quality Python web application for quantitative cryptocurrency strategy research.
+
+This is not a prototype, educational demonstration, or simple trading bot.
+
+Build a comprehensive quantitative research platform capable of discovering, generating, backtesting, optimizing, statistically validating, ranking, monitoring, and paper-trading thousands of cryptocurrency trading strategies.
+
+The platform must combine:
+
+- Mathematical quantitative trading.
+- Statistical arbitrage.
+- Price action.
+- Smart Money Concepts (SMC).
+- ICT trading methodologies.
+- Technical indicators.
+- Market microstructure.
+- Volatility and momentum models.
+- Market regime detection.
+- Systematic strategy discovery.
+- Advanced statistical validation.
+- Portfolio construction and risk management.
+
+IMPORTANT: The core research and strategy discovery system MUST work without AI, LLMs, external AI APIs, or paid AI services.
+
+Use deterministic mathematical models, statistical methods, algorithms, and rule-based research.
+
+Machine learning can be implemented as an optional independent research module, but the entire platform must remain fully functional when ML is disabled.
+
+---
+
+# 2. NON-NEGOTIABLE DEVELOPMENT REQUIREMENTS
+
+1. Build a complete working application, not merely an architecture or plan.
+2. Use Python as the primary programming language.
+3. Build a browser-based web application only.
+4. Do not build a desktop application.
+5. Do not require React or TypeScript. Prefer Python server-rendered templates with HTML, CSS, JavaScript and HTMX where appropriate.
+6. Use modular, maintainable and testable architecture.
+7. Do not create placeholder pages for features that are supposed to work.
+8. Never display fabricated backtest results, market data, trades or performance metrics.
+9. Every dashboard metric must come from actual calculations or clearly identified sample data.
+10. Every research experiment must be reproducible.
+11. Preserve historical experiment results.
+12. Implement proper database persistence.
+13. Implement background processing for long-running research jobs.
+14. Support restarting interrupted research jobs.
+15. Handle API errors, missing data, exchange rate limits and database failures.
+16. Never use future information when calculating historical signals.
+17. Prevent look-ahead bias, survivorship bias and data leakage.
+18. Never optimize strategies using the final untouched test dataset.
+19. Include automated unit tests, integration tests and end-to-end tests.
+20. Do not stop after creating the project structure.
+
+You must implement, execute, inspect, debug and verify the complete application.
+
+If a feature cannot be implemented because of an external API limitation, clearly document the limitation and implement the best available alternative. Never pretend that unsupported data is available.
+
+---
+
+# 3. APPLICATION OBJECTIVE
+
+Build a platform named:
+
+CRYPTO QUANT LAB
+
+Primary objective:
+
+Automatically discover statistically robust cryptocurrency trading strategies by testing thousands of mathematically generated combinations of trading conditions, indicators, patterns, market structure rules, entry conditions, exit conditions and risk management configurations.
+
+The system should eventually be able to:
+
+- Download extensive historical market data.
+- Analyze multiple cryptocurrencies.
+- Generate 20,000+ candidate strategies.
+- Run large-scale backtests.
+- Analyze different market regimes.
+- Identify overfitted strategies.
+- Perform out-of-sample validation.
+- Run walk-forward optimization.
+- Perform Monte Carlo simulations.
+- Rank surviving strategies.
+- Construct diversified strategy portfolios.
+- Run live-data paper trading.
+- Provide comprehensive research reports.
+
+The goal is not to maximize historical profit.
+
+The goal is to identify strategies with repeatable statistical edges, acceptable risk and robust out-of-sample performance.
+
+---
+
+# 4. TECHNOLOGY STACK
+
+Use the following preferred technology stack.
+
+Backend:
+- Python 3.12+
+- FastAPI
+- Pydantic
+- SQLAlchemy
+- Alembic
+
+Frontend:
+- Jinja2
+- HTML5
+- CSS3
+- JavaScript
+- HTMX
+- Plotly.js
+
+Data processing:
+- Polars
+- NumPy
+- Pandas
+
+Quantitative research:
+- SciPy
+- Statsmodels
+- TA-Lib or a reliable alternative
+- scikit-learn for optional ML
+
+Backtesting:
+- Custom vectorized backtesting engine
+- Event-driven execution simulator
+- VectorBT where useful
+
+Optimization:
+- Optuna
+- Random search
+- Grid search
+- Genetic algorithms
+
+Storage:
+- PostgreSQL
+- TimescaleDB where appropriate
+- Parquet for historical market datasets
+
+Background processing:
+- Celery
+- Redis
+
+Testing:
+- Pytest
+- Hypothesis
+- Playwright
+
+Deployment:
+- Linux VPS
+- Docker
+- Docker Compose
+- Nginx
+- Uvicorn
+
+Choose compatible dependency versions and lock them in the project.
+
+Do not introduce unnecessary technologies.
+
+---
+
+# 5. SUPPORTED MARKETS AND INSTRUMENTS
+
+Initial exchange:
+
+Binance.
+
+Initial cryptocurrency pairs:
+
+- BTCUSDT
+- ETHUSDT
+- SOLUSDT
+
+Initial timeframes:
+
+- 1 minute
+- 3 minutes
+- 5 minutes
+- 15 minutes
+- 30 minutes
+- 1 hour
+- 2 hours
+- 4 hours
+- 1 day
+
+Support both spot and USDT-margined futures where the relevant market data and execution simulation are available.
+
+The system must support adding additional symbols without changing core application architecture.
+
+Implement a configurable exchange adapter so other exchanges can be integrated later.
+
+---
+
+# 6. HISTORICAL DATA ENGINE
+
+Develop a comprehensive market data acquisition system.
+
+## 6.1 OHLCV data
+
+Download and store:
+
+- Open
+- High
+- Low
+- Close
+- Volume
+- Quote asset volume
+- Number of trades
+- Taker buy volume
+- Taker buy quote volume
+- Candle open timestamp
+- Candle close timestamp
+
+Download the maximum historical data available through the exchange APIs.
+
+Implement automatic historical pagination.
+
+Do not assume that one API response contains all historical data.
+
+## 6.2 Derivatives data
+
+Where available, collect:
+
+- Funding rates
+- Open interest
+- Open interest changes
+- Long/short ratios
+- Liquidation information
+- Futures basis
+- Mark prices
+- Index prices
+
+Record the source, availability and timestamp of each dataset.
+
+Do not fabricate historical derivatives information.
+
+## 6.3 Order book and trade data
+
+Implement optional collection of:
+
+- Bid/ask spread
+- Order book depth
+- Market trades
+- Aggressive buying and selling
+- Order book imbalance
+- Volume imbalance
+- Depth changes
+
+Historical order book data must be treated separately from live collected data.
+
+Clearly identify the earliest available date and coverage of each dataset.
+
+## 6.4 Data quality management
+
+Implement:
+
+- Missing candle detection.
+- Duplicate detection.
+- Timestamp validation.
+- Outlier detection.
+- Exchange data consistency checks.
+- Missing interval reporting.
+- Data normalization.
+- Timezone normalization to UTC.
+- Dataset versioning.
+- Data provenance.
+
+Raw historical data must never be silently overwritten.
+
+## 6.5 Data management dashboard
+
+Create a data management page showing:
+
+- Supported assets.
+- Supported timeframes.
+- Available historical date ranges.
+- Number of candles.
+- Last synchronization time.
+- Missing candles.
+- Download progress.
+- API errors.
+- Data quality status.
+- Dataset storage size.
+
+Include buttons for downloading, updating, validating and repairing datasets.
+
+---
+
+# 7. QUANTITATIVE RESEARCH LIBRARY
+
+Develop reusable mathematical and technical research components.
+
+Every component must have a clearly defined mathematical calculation, configurable parameters, output format and unit tests.
+
+## 7.1 Trend indicators
+
+Implement:
+
+- SMA
+- EMA
+- WMA
+- HMA
+- VWAP
+- Anchored VWAP
+- ADX
+- Supertrend
+- Donchian Channels
+- Ichimoku
+- Linear Regression Slope
+
+## 7.2 Momentum indicators
+
+Implement:
+
+- RSI
+- Stochastic RSI
+- MACD
+- CCI
+- ROC
+- Momentum
+- Williams %R
+- Ultimate Oscillator
+- TRIX
+
+## 7.3 Volatility indicators
+
+Implement:
+
+- ATR
+- Historical Volatility
+- Bollinger Bands
+- Keltner Channels
+- Donchian Width
+- Parkinson Volatility
+- Garman-Klass Volatility
+- Volatility Percentile
+- Volatility Regime Detection
+
+## 7.4 Volume analysis
+
+Implement:
+
+- OBV
+- Volume SMA
+- Volume Z-score
+- Volume Profile where sufficient underlying data exists
+- Cumulative Volume Delta where trade data exists
+- Relative Volume
+- Buying/Selling Pressure
+- Volume Imbalance
+
+## 7.5 Statistical research
+
+Implement:
+
+- Z-score
+- Rolling Mean
+- Rolling Standard Deviation
+- Pearson Correlation
+- Spearman Correlation
+- Autocorrelation
+- Partial Autocorrelation
+- Stationarity Tests
+- Augmented Dickey-Fuller Test
+- KPSS Test
+- Cointegration
+- Engle-Granger Test
+- Linear Regression
+- Residual Analysis
+- Kalman Filter
+- Hurst Exponent
+- Entropy Measures
+- Volatility Clustering
+- GARCH-family volatility models
+
+## 7.6 Price action engine
+
+Convert discretionary price action concepts into objective mathematical rules.
+
+Implement:
+
+- Swing Highs
+- Swing Lows
+- Higher Highs
+- Higher Lows
+- Lower Highs
+- Lower Lows
+- Breakouts
+- Breakdowns
+- Support and Resistance
+- Trendline Detection
+- Candlestick Patterns
+- Inside Bars
+- Engulfing Patterns
+- Pin Bars
+- Range Expansion
+- Failed Breakouts
+
+Every pattern must have a precise detection rule.
+
+## 7.7 SMC engine
+
+Implement:
+
+- Swing Structure
+- Break of Structure
+- Change of Character
+- Market Structure Shift
+- Internal Structure
+- External Structure
+- Equal Highs
+- Equal Lows
+- Liquidity Sweeps
+- Buy-Side Liquidity
+- Sell-Side Liquidity
+- Order Blocks
+- Breaker Blocks
+- Mitigation Blocks
+- Fair Value Gaps
+- Inverse Fair Value Gaps
+- Displacement
+- Premium and Discount Zones
+- Dealing Range
+
+## 7.8 ICT engine
+
+Implement objectively testable versions of:
+
+- Fair Value Gap
+- Optimal Trade Entry
+- Liquidity Raid
+- Judas Swing
+- Opening Range
+- Session High and Low
+- Previous Day High and Low
+- Previous Week High and Low
+- Daily Bias
+- Weekly Bias
+- Power of Three
+- Kill Zones
+- SMT Divergence
+- Consequent Encroachment
+
+Use configurable session definitions and timezones.
+
+Do not treat subjective concepts as unquestionable signals. Document detection assumptions.
+
+---
+
+# 8. MARKET REGIME DETECTION ENGINE
+
+Build an independent market regime detection module.
+
+Identify:
+
+1. Strong Bull Trend
+2. Weak Bull Trend
+3. Strong Bear Trend
+4. Weak Bear Trend
+5. Sideways Market
+6. High Volatility
+7. Low Volatility
+8. Volatility Expansion
+9. Volatility Compression
+10. Transitional Regime
+
+Use combinations of:
+
+- ADX
+- EMA slopes
+- Return distributions
+- ATR percentiles
+- Volatility clustering
+- Market breadth where available
+- Markov regime models
+- Hidden Markov Models as an optional statistical method
+
+Regime detection must use only information available at the relevant historical timestamp.
+
+Create a historical market regime visualization.
+
+Every strategy must be tested across individual regimes, not only across the entire historical period.
+
+---
+
+# 9. AUTOMATED STRATEGY GENERATION ENGINE
+
+This is one of the most important components.
+
+Develop an automated strategy discovery engine capable of generating at least 20,000 distinct candidate strategies.
+
+Do not manually hardcode 20,000 strategies.
+
+Generate strategies using reusable components and rule combinations.
+
+## 9.1 Strategy construction
+
+Allow combinations of:
+
+- Trend filters
+- Momentum conditions
+- Volatility filters
+- Volume conditions
+- Statistical conditions
+- Price action conditions
+- SMC conditions
+- ICT conditions
+- Market regime filters
+- Entry confirmations
+- Exit conditions
+- Stop-loss models
+- Take-profit models
+
+Support:
+
+- Long-only strategies
+- Short-only strategies
+- Long/short strategies
+
+## 9.2 Strategy templates
+
+Include:
+
+- Trend following
+- Mean reversion
+- Momentum breakout
+- Volatility breakout
+- Statistical arbitrage
+- Pairs trading
+- Pullback trading
+- Range trading
+- Liquidity sweep strategies
+- BOS/CHOCH strategies
+- FVG strategies
+- Order block strategies
+- Multi-timeframe strategies
+- Hybrid quantitative strategies
+
+## 9.3 Parameter generation
+
+Automatically test different parameter ranges.
+
+Examples:
+
+EMA:
+- 10
+- 20
+- 30
+- 50
+- 100
+- 150
+- 200
+
+RSI:
+- 7
+- 9
+- 14
+- 21
+- 28
+
+ATR:
+- 7
+- 10
+- 14
+- 20
+- 28
+
+Also generate configurable thresholds, lookback periods, stop-loss multipliers, take-profit multipliers and combinations.
+
+These are starting search spaces, not fixed universal settings.
+
+## 9.4 Search algorithms
+
+Implement:
+
+1. Exhaustive Grid Search
+2. Random Search
+3. Genetic Algorithms
+4. Evolutionary Strategy Generation
+5. Bayesian Optimization through Optuna
+
+Every generated strategy must have:
+
+- Unique strategy ID
+- Strategy name
+- Strategy family
+- Rule definition
+- Parameter configuration
+- Version
+- Creation timestamp
+- Dataset reference
+- Experiment ID
+
+## 9.5 Strategy grammar
+
+Develop a formal strategy grammar.
+
+Example:
+
+ENTRY =
+Trend Filter
+AND Momentum Condition
+AND Optional Volume Filter
+AND Optional Market Structure Confirmation
+
+EXIT =
+Stop Loss
+OR Take Profit
+OR Reversal Signal
+OR Time-Based Exit
+
+Support logical operators:
+
+- AND
+- OR
+- NOT
+
+Implement validation to reject logically invalid strategies.
+
+Prevent duplicate or semantically identical strategy generation.
+
+## 9.6 Research job controls
+
+The interface must allow the user to:
+
+- Select symbols.
+- Select timeframes.
+- Select strategy families.
+- Select indicators.
+- Configure parameter ranges.
+- Set candidate count.
+- Select search algorithm.
+- Start research.
+- Pause research.
+- Resume research.
+- Cancel research.
+- View live progress.
+- View completed experiments.
+
+Support 20,000+ candidates without requiring all candidates to remain in RAM simultaneously.
+
+Use batching, vectorization, multiprocessing or other appropriate optimizations.
+
+---
+
+# 10. ADVANCED BACKTESTING ENGINE
+
+Build two complementary backtesting engines.
+
+## 10.1 Vectorized backtesting
+
+Use for large-scale strategy screening.
+
+Optimize for high-throughput calculations.
+
+## 10.2 Event-driven backtesting
+
+Use for detailed execution simulation and final validation.
+
+Simulate:
+
+- Market orders
+- Limit orders
+- Stop orders
+- Stop-loss orders
+- Take-profit orders
+- Partial fills
+- Position sizing
+- Position management
+- Leverage
+- Funding payments
+- Fees
+- Slippage
+- Spread
+- Exchange constraints
+
+For OHLC-only simulations, handle ambiguous stop-loss/take-profit ordering conservatively.
+
+Never assume the most favorable execution when candle data cannot establish the true order of events.
+
+## 10.3 Performance metrics
+
+Calculate:
+
+- Net Profit
+- Gross Profit
+- Gross Loss
+- Profit Factor
+- Win Rate
+- Loss Rate
+- Average Win
+- Average Loss
+- Expectancy
+- Sharpe Ratio
+- Sortino Ratio
+- Calmar Ratio
+- Maximum Drawdown
+- Average Drawdown
+- Recovery Factor
+- Ulcer Index
+- Return on Capital
+- Annualized Return
+- Trade Frequency
+- Average Holding Period
+- Maximum Consecutive Wins
+- Maximum Consecutive Losses
+- Exposure
+- Turnover
+- Long Performance
+- Short Performance
+
+All metrics must be mathematically correct and independently tested.
+
+---
+
+# 11. ADVANCED STATISTICAL VALIDATION ENGINE
+
+A strategy must not qualify for the final strategy leaderboard merely because it produced high historical returns.
+
+Implement comprehensive validation.
+
+## 11.1 Chronological dataset separation
+
+Implement configurable:
+
+- Training Dataset
+- Validation Dataset
+- Untouched Out-of-Sample Dataset
+
+Provide sensible default splits, such as:
+
+60% training
+20% validation
+20% final test
+
+Use chronological separation.
+
+Never shuffle financial time series randomly to create the primary test split.
+
+## 11.2 Walk-forward analysis
+
+Implement:
+
+- Rolling Window
+- Expanding Window
+- Anchored Walk-Forward
+- Multiple Training Windows
+- Multiple Test Windows
+
+Generate a complete walk-forward report.
+
+## 11.3 Overfitting detection
+
+Implement:
+
+- Probability of Backtest Overfitting
+- Combinatorially Symmetric Cross-Validation
+- Deflated Sharpe Ratio
+- Multiple Hypothesis Testing Corrections
+- False Discovery Rate
+- Parameter Stability Analysis
+- Neighboring Parameter Robustness
+- Backtest Selection Bias Analysis
+
+Track the number of attempted strategy configurations and optimizations.
+
+## 11.4 Monte Carlo simulation
+
+Implement:
+
+- Random Trade Sequence Permutation
+- Bootstrap Resampling
+- Block Bootstrap where appropriate
+- Return Distribution Simulation
+- Equity Curve Simulation
+- Drawdown Probability
+- Ruin Probability
+- Confidence Intervals
+
+Support at least 1,000 simulations by default, with configurable higher counts.
+
+Report median, percentile and worst-case scenarios.
+
+## 11.5 Stress testing
+
+Test strategies under:
+
+- Increased transaction fees
+- Increased slippage
+- Wider spreads
+- Delayed execution
+- Missing candles
+- Sudden volatility spikes
+- Extreme market gaps
+- Reduced liquidity
+- Consecutive losing trades
+
+Reject fragile strategies.
+
+---
+
+# 12. STRATEGY RANKING ENGINE
+
+Create a configurable strategy evaluation and ranking system.
+
+Use multiple independent dimensions:
+
+- Out-of-Sample Performance
+- Risk-Adjusted Return
+- Maximum Drawdown
+- Walk-Forward Consistency
+- Monte Carlo Robustness
+- Parameter Stability
+- Market Regime Consistency
+- Trade Count
+- Execution Sensitivity
+
+Implement a weighted scoring framework.
+
+Initial example:
+
+Out-of-Sample Sharpe: 25%
+Profit Factor: 15%
+Drawdown: 20%
+Walk-Forward Consistency: 20%
+Monte Carlo Robustness: 10%
+Parameter Stability: 10%
+
+These weights must be configurable.
+
+Implement hard rejection rules before ranking.
+
+Do not allow one exceptional metric to compensate for catastrophic weakness elsewhere.
+
+Do not use the final test set repeatedly for strategy selection.
+
+The final test dataset must remain untouched until the research process and strategy selection are frozen.
+
+---
+
+# 13. PORTFOLIO CONSTRUCTION ENGINE
+
+Do not simply select the top 20 strategies.
+
+Develop a portfolio engine that evaluates strategy independence and diversification.
+
+Implement:
+
+- Strategy Correlation Matrix
+- Return Correlation
+- Drawdown Correlation
+- Strategy Clustering
+- Asset Exposure
+- Timeframe Exposure
+- Risk Contribution
+- Position Allocation
+- Volatility Scaling
+- Maximum Exposure
+- Portfolio Drawdown Controls
+
+Implement configurable allocation methods:
+
+- Equal Weight
+- Volatility-Based Weighting
+- Risk Parity
+- Minimum Variance
+- Sharpe-Based Allocation
+- Maximum Drawdown Constraints
+
+Prevent excessive concentration in strategies that behave similarly.
+
+---
+
+# 14. RISK MANAGEMENT ENGINE
+
+Develop an independent risk management module.
+
+Implement:
+
+- Fixed Fractional Risk
+- ATR-Based Position Sizing
+- Volatility-Based Sizing
+- Maximum Daily Loss
+- Maximum Portfolio Drawdown
+- Maximum Open Positions
+- Maximum Asset Exposure
+- Maximum Leverage
+- Consecutive Loss Protection
+- Emergency Trading Halt
+
+All risk parameters must be configurable.
+
+Risk management must be enforced at execution time, not just displayed in the dashboard.
+
+---
+
+# 15. PAPER TRADING ENGINE
+
+Develop a functional paper trading environment.
+
+Connect to Binance public market data.
+
+Do not require real trading API permissions for paper trading.
+
+Implement:
+
+- Real-Time Market Data
+- Signal Generation
+- Virtual Order Execution
+- Virtual Positions
+- Entry and Exit Records
+- Fees and Slippage Simulation
+- Portfolio Balance
+- Unrealized P&L
+- Realized P&L
+- Drawdown Monitoring
+- Strategy-Level Performance
+- Execution Logs
+
+Allow multiple strategies to paper trade simultaneously.
+
+Compare actual paper trading performance against backtest expectations.
+
+Store all paper trading records persistently.
+
+The system must resume paper trading after a server restart without duplicating trades.
+
+---
+
+# 16. LIVE TRADING ARCHITECTURE
+
+Prepare an optional live execution module, but keep it disabled by default.
+
+Implement an exchange adapter and secure API credential management.
+
+Requirements:
+
+- API credentials encrypted at rest.
+- Never store API secrets in source code.
+- Never expose secrets in frontend responses or logs.
+- Default to read-only or trading-only permissions.
+- Never request withdrawal permissions.
+- Explicit user confirmation before enabling live trading.
+- Maximum capital and exposure limits.
+- Emergency kill switch.
+- Duplicate order protection.
+- Order reconciliation.
+- Exchange connectivity monitoring.
+
+Do not activate live trading automatically.
+
+Paper trading is the default operational mode.
+
+---
+
+# 17. WEB APPLICATION DASHBOARD
+
+Build a polished, professional, institutional-style quantitative research interface.
+
+Use a dark professional financial terminal aesthetic.
+
+The interface should be responsive and suitable for desktop and mobile browsers.
+
+Create the following pages.
+
+## 17.1 Overview Dashboard
+
+Display:
+
+- Total strategies generated
+- Total strategies tested
+- Passed validation
+- Failed validation
+- Active research jobs
+- Active paper strategies
+- Portfolio equity
+- Current drawdown
+- Latest research activity
+- Best validated strategies
+
+## 17.2 Market Data Center
+
+Display:
+
+- Assets
+- Timeframes
+- Historical coverage
+- Data quality
+- Download status
+- Synchronization history
+
+## 17.3 Quant Research Center
+
+Display:
+
+- Indicator library
+- Statistical models
+- Research components
+- Regime detection
+- Research experiment controls
+
+## 17.4 Strategy Discovery
+
+Display:
+
+- Strategy generator
+- Strategy families
+- Search parameters
+- Candidate count
+- Generation progress
+- Completed experiments
+- Failed experiments
+
+## 17.5 Backtesting Center
+
+Display:
+
+- Strategy selector
+- Asset selector
+- Timeframe selector
+- Date range
+- Execution settings
+- Backtest progress
+- Equity curve
+- Drawdown chart
+- Trade distribution
+- Detailed performance metrics
+
+## 17.6 Validation Center
+
+Display:
+
+- In-sample performance
+- Out-of-sample performance
+- Walk-forward results
+- Monte Carlo simulations
+- PBO
+- Deflated Sharpe Ratio
+- Parameter stability
+- Stress test results
+
+## 17.7 Strategy Leaderboard
+
+Display sortable and filterable results.
+
+Filters:
+
+- Asset
+- Timeframe
+- Strategy family
+- Sharpe ratio
+- Profit factor
+- Maximum drawdown
+- Number of trades
+- Validation status
+- Market regime
+
+Only properly validated strategies should receive a validated status.
+
+## 17.8 Portfolio Lab
+
+Display:
+
+- Selected strategies
+- Correlation matrix
+- Portfolio allocation
+- Portfolio equity curve
+- Risk contribution
+- Exposure
+- Portfolio drawdown
+
+## 17.9 Paper Trading Terminal
+
+Display:
+
+- Active paper strategies
+- Open positions
+- Orders
+- Trade history
+- Current P&L
+- Strategy performance
+- Execution logs
+- Risk status
+
+## 17.10 Experiment History
+
+Every experiment must be searchable and reproducible.
+
+Store:
+
+- Strategy definition
+- Dataset version
+- Parameters
+- Backtest configuration
+- Validation settings
+- Software version
+- Results
+- Experiment timestamp
+- Random seed
+
+Provide CSV and JSON exports.
+
+---
+
+# 18. DATABASE DESIGN
+
+Design a normalized and scalable database.
+
+Include appropriate tables for:
+
+- Users
+- Exchange Configurations
+- Assets
+- Market Datasets
+- Candles
+- Funding Rates
+- Open Interest
+- Market Trades
+- Order Book Snapshots
+- Strategy Definitions
+- Strategy Versions
+- Strategy Experiments
+- Backtest Results
+- Trade Records
+- Validation Results
+- Monte Carlo Results
+- Walk-Forward Results
+- Market Regimes
+- Portfolio Definitions
+- Portfolio Allocations
+- Paper Orders
+- Paper Positions
+- Paper Trades
+- Research Jobs
+- System Logs
+
+Use indexes, unique constraints, foreign keys and database migrations.
+
+Use efficient storage for large historical datasets.
+
+Avoid loading entire historical datasets into memory unnecessarily.
+
+---
+
+# 19. PERFORMANCE AND SCALABILITY
+
+The platform must support large research workloads.
+
+Implement:
+
+- Vectorized indicator calculations
+- Efficient array operations
+- Polars-based processing where appropriate
+- Multiprocessing
+- Batched experiments
+- Background jobs
+- Persistent job checkpoints
+- Incremental dataset updates
+- Database indexing
+- Caching
+- Memory management
+- Progress tracking
+
+Benchmark:
+
+- Data loading speed
+- Indicator computation speed
+- Backtest throughput
+- Strategy generation speed
+- Peak memory usage
+
+Do not claim a fixed number of strategies per second without measuring it.
+
+---
+
+# 20. AUTOMATED TESTING
+
+Testing is mandatory.
+
+Implement tests for:
+
+1. Historical data downloading.
+2. Data validation.
+3. Indicator calculations.
+4. SMC detection.
+5. ICT detection.
+6. Strategy generation.
+7. Strategy uniqueness.
+8. Entry and exit logic.
+9. Backtest execution.
+10. Fee calculations.
+11. Slippage calculations.
+12. Position sizing.
+13. Performance metrics.
+14. OOS separation.
+15. Walk-forward analysis.
+16. Monte Carlo simulation.
+17. Strategy ranking.
+18. Portfolio allocation.
+19. Paper trading.
+20. API endpoints.
+21. Database persistence.
+22. Authentication and authorization.
+23. Background job recovery.
+
+Add synthetic test datasets with known expected outcomes.
+
+Add tests specifically designed to detect look-ahead bias.
+
+Test that future candles cannot influence past signals.
+
+Test that stop-loss and take-profit execution is conservative when OHLC data is ambiguous.
+
+---
+
+# 21. PROJECT STRUCTURE
+
+Use a clean modular architecture similar to:
+
+crypto_quant_lab/
+│
+├── app/
+│   ├── main.py
+│   ├── config.py
+│   ├── dependencies.py
+│   ├── api/
+│   ├── auth/
+│   ├── services/
+│   └── templates/
+│
+├── core/
+│   ├── events.py
+│   ├── logging.py
+│   ├── exceptions.py
+│   └── scheduler.py
+│
+├── data/
+│   ├── exchanges/
+│   ├── downloaders/
+│   ├── processors/
+│   ├── validators/
+│   └── storage/
+│
+├── indicators/
+│   ├── trend.py
+│   ├── momentum.py
+│   ├── volatility.py
+│   ├── volume.py
+│   └── statistical.py
+│
+├── price_action/
+├── smc/
+├── ict/
+├── regimes/
+│
+├── strategies/
+│   ├── grammar.py
+│   ├── generator.py
+│   ├── optimizer.py
+│   ├── genetic.py
+│   └── registry.py
+│
+├── backtesting/
+│   ├── vectorized/
+│   ├── event_driven/
+│   ├── execution.py
+│   ├── costs.py
+│   └── metrics.py
+│
+├── validation/
+│   ├── out_of_sample.py
+│   ├── walk_forward.py
+│   ├── monte_carlo.py
+│   ├── overfitting.py
+│   └── stress_testing.py
+│
+├── portfolio/
+├── risk/
+├── paper_trading/
+├── live_trading/
+│
+├── workers/
+├── database/
+├── frontend/
+├── tests/
+├── scripts/
+├── docker/
+│
+├── requirements.txt
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example
+└── README.md
+
+You may improve the structure where technically necessary, but keep all modules logically separated.
+
+---
+
+# 22. DEVELOPMENT METHODOLOGY
+
+Develop the project in the following mandatory stages.
+
+STAGE 1: Project Foundation
+- Initialize the project.
+- Configure dependencies.
+- Configure the database.
+- Build FastAPI application.
+- Implement authentication.
+- Build the basic dashboard layout.
+
+STAGE 2: Data Infrastructure
+- Implement Binance adapters.
+- Download historical candles.
+- Implement pagination.
+- Build data validation.
+- Implement dataset storage.
+- Verify actual historical data.
+
+STAGE 3: Research Library
+- Implement technical indicators.
+- Implement mathematical models.
+- Implement price action.
+- Implement SMC.
+- Implement ICT.
+- Implement regime detection.
+- Test every component.
+
+STAGE 4: Strategy Discovery
+- Build strategy grammar.
+- Implement rule combinations.
+- Implement parameter generation.
+- Implement grid search.
+- Implement random search.
+- Implement genetic algorithms.
+- Implement Optuna optimization.
+- Verify generation of 20,000+ unique candidates.
+
+STAGE 5: Backtesting
+- Build vectorized engine.
+- Build event-driven engine.
+- Implement realistic transaction costs.
+- Implement performance metrics.
+- Run known synthetic test cases.
+
+STAGE 6: Statistical Validation
+- Implement chronological data splits.
+- Implement OOS testing.
+- Implement walk-forward testing.
+- Implement Monte Carlo.
+- Implement PBO.
+- Implement Deflated Sharpe Ratio.
+- Implement stress testing.
+
+STAGE 7: Ranking and Portfolio
+- Build ranking engine.
+- Implement rejection filters.
+- Implement strategy clustering.
+- Implement portfolio optimization.
+- Implement portfolio risk controls.
+
+STAGE 8: Paper Trading
+- Integrate live public market feeds.
+- Implement virtual order execution.
+- Implement persistent positions.
+- Implement trade monitoring.
+- Test server restart recovery.
+
+STAGE 9: Dashboard Completion
+- Complete all pages.
+- Integrate charts.
+- Integrate background job progress.
+- Implement filters and exports.
+- Verify all user interactions.
+
+STAGE 10: Final Quality Assurance
+- Run all tests.
+- Fix all discovered errors.
+- Test fresh installation.
+- Test database migrations.
+- Test background jobs.
+- Test server restart.
+- Test paper trading.
+- Verify security.
+- Verify deployment instructions.
+
+Do not skip stages.
+
+---
+
+# 23. STRICT RULES AGAINST FAKE IMPLEMENTATION
+
+This section is critical.
+
+NEVER:
+
+- Create dummy strategies and label them profitable.
+- Hardcode performance metrics.
+- Generate fake market data and present it as real.
+- Display fake progress percentages.
+- Use random numbers as backtest returns.
+- Pretend a strategy has passed validation without running validation.
+- Mark a strategy as robust solely because of its in-sample performance.
+- Silently skip failed experiments.
+- Ignore API rate limits.
+- Hide execution costs.
+- Allow look-ahead bias.
+- Use future candles to confirm historical signals.
+- Present simulated results as actual exchange trading results.
+- Claim that a strategy is profitable based on insufficient evidence.
+
+Every result must have a traceable experiment ID and dataset reference.
+
+Clearly distinguish:
+
+- Backtested
+- Out-of-Sample Tested
+- Walk-Forward Tested
+- Monte Carlo Tested
+- Paper Trading
+- Live Trading
+
+A strategy must never receive a higher validation status than the evidence supports.
+
+---
+
+# 24. DOCUMENTATION AND DELIVERY
+
+Deliver the following:
+
+1. Complete source code.
+2. Complete folder structure.
+3. requirements.txt with pinned dependencies.
+4. .env.example.
+5. Database migration scripts.
+6. Dockerfile.
+7. Docker Compose configuration.
+8. Installation guide.
+9. Local development guide.
+10. VPS deployment guide.
+11. Binance API configuration guide.
+12. Historical data download guide.
+13. Strategy generation guide.
+14. Backtesting methodology.
+15. Statistical validation methodology.
+16. Paper trading guide.
+17. Troubleshooting guide.
+18. Automated test suite.
+19. Architecture documentation.
+20. Known limitations documentation.
+
+Include exact commands for installing, starting, testing and deploying the application.
+
+---
+
+# 25. FINAL ACCEPTANCE CRITERIA
+
+The application is not complete until the following are verified:
+
+[ ] Application installs successfully from a clean environment.
+
+[ ] Web interface loads successfully.
+
+[ ] Database migrations execute successfully.
+
+[ ] Historical Binance candle data downloads successfully.
+
+[ ] BTC, ETH and SOL datasets can be managed independently.
+
+[ ] Multiple timeframes are supported.
+
+[ ] Data quality checks work.
+
+[ ] Technical indicators calculate correctly.
+
+[ ] Statistical models execute correctly.
+
+[ ] Price action, SMC and ICT components produce testable signals.
+
+[ ] Market regimes are detected.
+
+[ ] Strategy generator creates at least 20,000 unique valid candidates.
+
+[ ] Strategy generation can be paused and resumed.
+
+[ ] Backtesting engine executes real historical simulations.
+
+[ ] Fees and slippage are included.
+
+[ ] Performance metrics are calculated correctly.
+
+[ ] Out-of-sample testing works.
+
+[ ] Walk-forward testing works.
+
+[ ] Monte Carlo simulations work.
+
+[ ] Overfitting controls work.
+
+[ ] Strategies can be ranked.
+
+[ ] Strategy correlation is calculated.
+
+[ ] Portfolio risk management works.
+
+[ ] Paper trading works with live public market data.
+
+[ ] Paper trading survives application restarts.
+
+[ ] Research results persist in the database.
+
+[ ] CSV and JSON exports work.
+
+[ ] Automated tests pass.
+
+[ ] No critical placeholder functionality remains.
+
+[ ] Deployment documentation is complete.
+
+Do not claim completion unless these acceptance criteria have been tested.
+
+---
+
+# 26. HOW YOU MUST WORK AS THE CODING AGENT
+
+Follow this workflow:
+
+1. Inspect the development environment.
+2. Create a detailed implementation checklist.
+3. Create the project structure.
+4. Implement one complete module at a time.
+5. Run tests after every major module.
+6. Fix errors before proceeding.
+7. Integrate modules incrementally.
+8. Run actual end-to-end tests.
+9. Inspect the application in a browser.
+10. Fix UI, API, database and execution problems.
+11. Verify every acceptance criterion.
+12. Provide a final implementation report.
+
+Do not merely explain what needs to be built.
+
+Actually build it.
+
+Do not stop after generating a few files.
+
+Do not replace complex modules with simplified placeholders.
+
+If the project is too large for one development session, maintain a persistent DEVELOPMENT_STATUS.md containing:
+
+- Completed modules.
+- Incomplete modules.
+- Current implementation stage.
+- Known errors.
+- Test results.
+- Next exact development task.
+
+Resume from that file in subsequent sessions without rewriting working modules.
+
+Preserve all previously working functionality when making changes.
+
+Do not remove features just to make tests pass.
+
+Prioritize correctness, reproducibility, statistical validity, execution realism, performance and maintainability over visual presentation.
+
+# FINAL INSTRUCTION
+
+Build CRYPTO QUANT LAB as a complete, functional quantitative research platform.
+
+The final product should allow a user to download historical cryptocurrency data, generate thousands of mathematically defined strategies, backtest them, identify robust candidates using rigorous statistical methods, construct diversified portfolios and monitor strategies through paper trading.
+
+The platform must be usable independently without paid AI services.
+
+Start by inspecting the environment and implementing STAGE 1.
+
+Do not stop at planning. Start coding and continue until the acceptance criteria are satisfied or explicitly documented as blocked by a verifiable external limitation.

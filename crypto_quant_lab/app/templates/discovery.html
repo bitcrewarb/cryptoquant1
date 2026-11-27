@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Strategy Discovery</h1>
+    <p class="page-subtitle">Step 03 · Stream up to 20,000+ canonical unique strategies across 14 families on the 60% chronological training split.</p>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <a href="/leaderboard" class="btn btn-secondary">Strategy Leaderboard</a>
+  </div>
+</div>
+
+<div id="disc-notice" class="notice-bar" style="display:none;"></div>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Configure &amp; Launch Research Discovery Job</h2>
+  </div>
+  <form class="form-grid" onsubmit="return startDiscovery(event)">
+    <div class="field">
+      <label for="disc-ds">Dataset (60% Train Split Used)</label>
+      <select id="disc-ds" required>
+        {% for d in datasets %}
+          <option value="{{ d.id }}" {% if selected_dataset_id == d.id %}selected{% endif %}>{{ d.symbol }} {{ d.timeframe }} ({{ d.market_type }} v{{ d.version }} · {{ d.candle_count }} bars)</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="disc-algo">Search Algorithm</label>
+      <select id="disc-algo">
+        <option value="random_search">Random Search (Streaming)</option>
+        <option value="grid_search">Exhaustive Grid Search</option>
+        <option value="genetic_algorithm">Genetic Algorithm</option>
+        <option value="evolutionary">Evolutionary Strategy</option>
+        <option value="optuna">Bayesian Optuna TPE</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="disc-count">Candidate Count</label>
+      <input id="disc-count" type="number" value="500" min="10" max="50000" />
+    </div>
+    <div class="field">
+      <label for="disc-top">Persist Top N</label>
+      <input id="disc-top" type="number" value="40" min="5" max="500" />
+    </div>
+    <div class="field">
+      <label for="disc-seed">Random Seed</label>
+      <input id="disc-seed" type="number" value="42" />
+    </div>
+    <div>
+      <button id="disc-start-btn" type="submit" class="btn btn-primary" style="width:100%;">Start Discovery</button>
+    </div>
+  </form>
+
+  <div style="margin-top:14px;">
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">Strategy Families Filter (leave all unchecked to search across all 14 families)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;">
+      {% for fam in families %}
+        <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-primary);cursor:pointer;">
+          <input type="checkbox" class="fam-chk" value="{{ fam }}" /> {{ fam }}
+        </label>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Research Jobs &amp; Live Progress</h2>
+    <div class="panel-actions">
+      <span id="jobs-live-status" class="mono text-muted" style="font-size:12px;"></span>
+      <button id="refresh-jobs-btn" type="button" class="btn btn-secondary btn-sm" onclick="refreshJobs(this)">Refresh Jobs</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Job ID</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th class="num">Completed / Total</th>
+          <th class="num">Failed</th>
+          <th class="num" style="min-width:160px;">Progress</th>
+          <th>Controls</th>
+        </tr>
+      </thead>
+      <tbody id="jobs-tbody">
+        {% for j in jobs %}
+        <tr>
+          <td class="mono">{{ j.job_uid }}</td>
+          <td>{{ j.job_type }}</td>
+          <td>
+            <span class="status-label {% if j.status == 'completed' %}text-pos{% elif j.status == 'failed' %}text-neg{% else %}text-warn{% endif %}">{{ j.status.upper() }}</span>
+            {% if j.error_message %}<div class="text-neg" style="font-size:11px;max-width:240px;">{{ j.error_message }}</div>{% endif %}
+          </td>
+          <td class="num">{{ j.completed_items }} / {{ j.total_items }}</td>
+          <td class="num">{{ j.failed_items }}</td>
+          <td class="num">
+            <div>{{ "%.1f"|format(j.progress_pct) }}%</div>
+            <div class="cql-progress-track"><div class="cql-progress-fill" style="width:{{ [j.progress_pct, 100]|min }}%;"></div></div>
+          </td>
+          <td style="white-space:nowrap;">
+            {% if j.status in ('running', 'queued') %}
+              <button type="button" class="btn btn-secondary btn-sm" onclick="jobAction({{ j.id }}, 'pause', this)">Pause</button>
+              <button type="button" class="btn btn-danger btn-sm" onclick="jobAction({{ j.id }}, 'cancel', this)">Cancel</button>
+            {% elif j.status in ('paused', 'failed') %}
+              <button type="button" class="btn btn-secondary btn-sm" onclick="jobAction({{ j.id }}, 'resume', this)">Resume</button>
+              <button type="button" class="btn btn-danger btn-sm" onclick="jobAction({{ j.id }}, 'cancel', this)">Cancel</button>
+            {% elif j.status == 'completed' and j.job_type == 'strategy_discovery' %}
+              <button type="button" class="btn btn-primary btn-sm" onclick="loadJobResults({{ j.id }}, this)">View Results</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="disc-results-panel" class="panel" style="display:none;">
+  <div class="panel-header">
+    <h2 id="disc-results-title" class="panel-title">Top Discovered Candidates (Train Split)</h2>
+    <div class="panel-actions">
+      <button id="batch-val-btn" type="button" class="btn btn-primary btn-sm" onclick="batchValidateTop()">Batch Validate Top 5</button>
+      <a href="/leaderboard" class="btn btn-secondary btn-sm">Open Full Leaderboard</a>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Strategy</th>
+          <th>Market</th>
+          <th>Tier</th>
+          <th class="num">Train Sharpe</th>
+          <th class="num">Profit Factor</th>
+          <th class="num">Win %</th>
+          <th class="num">Max DD</th>
+          <th class="num">Trades</th>
+          <th>Next Actions</th>
+        </tr>
+      </thead>
+      <tbody id="disc-results-tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+let _lastLoadedCompletedJobId = null;
+let _currentTopExpIds = [];
+
+async function startDiscovery(e) {
+  e.preventDefault();
+  const dsEl = document.getElementById("disc-ds");
+  if (!dsEl.value) return showNotice("disc-notice", "Download a dataset first in Market Data Center.", "error");
+  const btn = document.getElementById("disc-start-btn");
+  const families = Array.from(document.querySelectorAll(".fam-chk:checked")).map(x => x.value);
+  setButtonLoading(btn, true, "Starting Job...");
+  try {
+    const res = await apiJson("/api/discovery/start", "POST", {
+      dataset_id: parseInt(dsEl.value, 10),
+      algorithm: document.getElementById("disc-algo").value,
+      candidate_count: parseInt(document.getElementById("disc-count").value, 10),
+      persist_top_n: parseInt(document.getElementById("disc-top").value, 10),
+      seed: parseInt(document.getElementById("disc-seed").value, 10),
+      families,
+    });
+    _lastLoadedCompletedJobId = null;
+    showNotice("disc-notice", `Discovery job ${res.job_uid} queued and running. Progress updates every 2s below.`, "info");
+    await refreshJobs();
+    refreshGlobalJobsIndicator();
+  } catch (err) {
+    showNotice("disc-notice", err.message, "error");
+  } finally {
+    setButtonLoading(btn, false);
+  }
+  return false;
+}
+
+async function jobAction(id, action, btn) {
+  setButtonLoading(btn, true, "Updating...");
+  try {
+    await apiJson(`/api/jobs/${id}/${action}`, "POST");
+    await refreshJobs();
+    refreshGlobalJobsIndicator();
+  } catch (err) {
+    showNotice("disc-notice", err.message, "error");
+    setButtonLoading(btn, false);
+  }
+}
+
+async function loadJobResults(jobId, btn = null) {
+  if (btn) setButtonLoading(btn, true, "Loading...");
+  const panel = document.getElementById("disc-results-panel");
+  const tbody = document.getElementById("disc-results-tbody");
+  panel.style.display = "block";
+  renderTableSkeleton("disc-results-tbody", 9, 5);
+  try {
+    const data = await apiJson(`/api/jobs/${jobId}/results`);
+    _lastLoadedCompletedJobId = jobId;
+    _currentTopExpIds = data.results.slice(0, 5).map(r => r.experiment_id);
+    document.getElementById("disc-results-title").textContent = `Top Discovered Candidates · ${data.job_uid} (${data.count} persisted)`;
+    if (!data.results.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No strategies met the minimum 5-trade filter in this run. Try increasing Candidate Count or candle count.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.results.map(r => `
+      <tr>
+        <td>
+          <div style="font-weight:600;">${escapeHtml(r.strategy_name)}</div>
+          <div class="text-muted" style="font-size:12px;">${escapeHtml(r.family)} · ${escapeHtml(r.direction)}</div>
+        </td>
+        <td class="mono">${escapeHtml(r.symbol)} ${escapeHtml(r.timeframe)}</td>
+        <td><span class="status-label ${r.validation_tier === 'VALIDATED' ? 'text-pos' : 'text-warn'}">${escapeHtml(r.validation_tier)}</span></td>
+        <td class="num">${r.sharpe_ratio.toFixed(2)}</td>
+        <td class="num">${r.profit_factor.toFixed(2)}</td>
+        <td class="num">${r.win_rate.toFixed(1)}%</td>
+        <td class="num text-neg">-${r.max_drawdown_pct.toFixed(1)}%</td>
+        <td class="num">${r.total_trades}</td>
+        <td style="white-space:nowrap;">
+          <a href="/backtesting?experiment_id=${r.experiment_id}&autorun=1" class="btn btn-secondary btn-sm">Backtest</a>
+          <a href="/validation?experiment_id=${r.experiment_id}&autorun=1" class="btn btn-primary btn-sm">Validate</a>
+        </td>
+      </tr>
+    `).join("");
+  } catch (err) {
+    showNotice("disc-notice", err.message, "error");
+  } finally {
+    if (btn) setButtonLoading(btn, false);
+  }
+}
+
+async function batchValidateTop() {
+  if (!_currentTopExpIds.length) return;
+  const btn = document.getElementById("batch-val-btn");
+  setButtonLoading(btn, true, "Queuing Batch...");
+  try {
+    const res = await apiJson("/api/validation/batch", "POST", {
+      experiment_ids: _currentTopExpIds,
+      mc_simulations: 1000,
+      wf_windows: 5,
+      wf_mode: "rolling",
+      n_trials_attempted: parseInt(document.getElementById("disc-count").value || "200", 10),
+    });
+    showNotice("disc-notice", `Batch validation job ${res.job_uid} started for top ${res.total_items} candidates.`, "info");
+    await refreshJobs();
+    refreshGlobalJobsIndicator();
+  } catch (err) {
+    showNotice("disc-notice", err.message, "error");
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+async function refreshJobs(btn = null) {
+  if (btn) setButtonLoading(btn, true, "Refreshing...");
+  try {
+    const jobs = await apiJson("/api/jobs", "GET", null, { showTopLoader: Boolean(btn) });
+    const tbody = document.getElementById("jobs-tbody");
+    const active = jobs.filter(j => j.status === "running" || j.status === "queued");
+    const statusEl = document.getElementById("jobs-live-status");
+    if (active.length) {
+      statusEl.innerHTML = `<span class="cql-spinner" style="width:12px;height:12px;vertical-align:middle;margin-right:6px;"></span>${active.length} active job${active.length > 1 ? "s" : ""} running`;
+    } else {
+      statusEl.textContent = "Idle";
+    }
+
+    tbody.innerHTML = jobs.slice(0, 20).map(j => {
+      let controls = "";
+      if (j.status === "running" || j.status === "queued") {
+        controls = `
+          <button type="button" class="btn btn-secondary btn-sm" onclick="jobAction(${j.id}, 'pause', this)">Pause</button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="jobAction(${j.id}, 'cancel', this)">Cancel</button>`;
+      } else if (j.status === "paused" || j.status === "failed") {
+        controls = `
+          <button type="button" class="btn btn-secondary btn-sm" onclick="jobAction(${j.id}, 'resume', this)">Resume</button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="jobAction(${j.id}, 'cancel', this)">Cancel</button>`;
+      } else if (j.status === "completed" && j.job_type === "strategy_discovery") {
+        controls = `<button type="button" class="btn btn-primary btn-sm" onclick="loadJobResults(${j.id}, this)">View Results</button>`;
+      } else if (j.status === "completed" && j.job_type === "validation_suite") {
+        controls = `<a href="/leaderboard" class="btn btn-primary btn-sm">Leaderboard</a>`;
+      }
+      return `
+        <tr>
+          <td class="mono">${escapeHtml(j.job_uid)}</td>
+          <td>${escapeHtml(j.job_type)}</td>
+          <td>
+            <span class="status-label ${j.status === 'completed' ? 'text-pos' : j.status === 'failed' ? 'text-neg' : 'text-warn'}">${j.status.toUpperCase()}</span>
+            ${j.error_message ? `<div class="text-neg" style="font-size:11px;max-width:240px;">${escapeHtml(j.error_message)}</div>` : ""}
+          </td>
+          <td class="num">${j.completed_items} / ${j.total_items}</td>
+          <td class="num">${j.failed_items}</td>
+          <td class="num">
+            <div>${j.progress_pct}%</div>
+            <div class="cql-progress-track"><div class="cql-progress-fill" style="width:${Math.min(100, j.progress_pct)}%;"></div></div>
+          </td>
+          <td style="white-space:nowrap;">${controls}</td>
+        </tr>`;
+    }).join("");
+
+    const latestCompletedDisc = jobs.find(j => j.job_type === "strategy_discovery" && j.status === "completed");
+    if (latestCompletedDisc && _lastLoadedCompletedJobId === null) {
+      loadJobResults(latestCompletedDisc.id);
+    }
+  } catch {
+    // ignore background polling transient errors
+  } finally {
+    if (btn) setButtonLoading(btn, false);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  refreshJobs();
+  setInterval(() => refreshJobs(), 2500);
+});
+</script>
+{% endblock %}

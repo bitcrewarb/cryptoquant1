@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Strategy Leaderboard</h1>
+    <p class="page-subtitle">Filterable ranking across validated, Monte Carlo tested, and discovered candidate strategies.</p>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <a href="/discovery" class="btn btn-secondary">03. Discover More</a>
+    <a href="/portfolio" class="btn btn-primary">06. Build Portfolio</a>
+  </div>
+</div>
+
+<div id="lb-notice" class="notice-bar" style="display:none;"></div>
+
+<section class="panel">
+  <form class="form-grid" onsubmit="return loadLeaderboard(event)">
+    <div class="field">
+      <label for="lb-sym">Asset</label>
+      <select id="lb-sym">
+        <option value="">All Assets</option>
+        {% for s in symbols %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="lb-tf">Timeframe</label>
+      <select id="lb-tf">
+        <option value="">All Timeframes</option>
+        {% for tf in timeframes %}<option value="{{ tf }}">{{ tf }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="lb-fam">Strategy Family</label>
+      <select id="lb-fam">
+        <option value="">All Families</option>
+        {% for fam in families %}<option value="{{ fam }}">{{ fam }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="lb-tier">Validation Status</label>
+      <select id="lb-tier">
+        <option value="">All Statuses</option>
+        <option value="VALIDATED">VALIDATED Only</option>
+        <option value="MONTE_CARLO_TESTED">MONTE_CARLO_TESTED</option>
+        <option value="BACKTESTED">BACKTESTED</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="lb-min-sh">Min Sharpe</label>
+      <input id="lb-min-sh" type="number" step="0.1" placeholder="-1.0" />
+    </div>
+    <div class="field">
+      <label for="lb-max-dd">Max Drawdown %</label>
+      <input id="lb-max-dd" type="number" step="1" placeholder="35" />
+    </div>
+    <div>
+      <button id="lb-submit-btn" type="submit" class="btn btn-primary" style="width:100%;">Apply Filters</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Ranked Experiments</h2>
+    <span id="lb-count" class="mono text-muted" style="font-size:12px;">Loading...</span>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Strategy</th>
+          <th>Market</th>
+          <th>Validation Tier</th>
+          <th class="num">Score</th>
+          <th class="num">Sharpe</th>
+          <th class="num">PF</th>
+          <th class="num">Win %</th>
+          <th class="num">Max DD</th>
+          <th class="num">Trades</th>
+          <th class="num">PBO / DSR</th>
+          <th>Workflow &amp; Export</th>
+        </tr>
+      </thead>
+      <tbody id="lb-tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+async function loadLeaderboard(e) {
+  if (e) e.preventDefault();
+  const btn = document.getElementById("lb-submit-btn");
+  if (e) setButtonLoading(btn, true, "Filtering...");
+  renderTableSkeleton("lb-tbody", 11, 5);
+
+  const params = new URLSearchParams();
+  const sym = document.getElementById("lb-sym").value;
+  const tf = document.getElementById("lb-tf").value;
+  const fam = document.getElementById("lb-fam").value;
+  const tier = document.getElementById("lb-tier").value;
+  const minSh = document.getElementById("lb-min-sh").value;
+  const maxDd = document.getElementById("lb-max-dd").value;
+  if (sym) params.set("symbol", sym);
+  if (tf) params.set("timeframe", tf);
+  if (fam) params.set("family", fam);
+  if (tier) params.set("validation_tier", tier);
+  if (minSh) params.set("min_sharpe", minSh);
+  if (maxDd) params.set("max_drawdown", maxDd);
+
+  try {
+    const rows = await apiJson(`/api/leaderboard?${params.toString()}`);
+    document.getElementById("lb-count").textContent = `${rows.length} strateg${rows.length === 1 ? "y" : "ies"}`;
+    const tbody = document.getElementById("lb-tbody");
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="11" class="empty-state">No strategies match the current filter criteria. <a href="/discovery" class="text-info">Run Strategy Discovery</a> to populate candidates.</td></tr>`;
+      return false;
+    }
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td><div style="font-weight:600;">${escapeHtml(r.strategy_name)}</div><div class="text-muted" style="font-size:12px;">${escapeHtml(r.family)} · ${escapeHtml(r.direction)}</div></td>
+        <td class="mono">${escapeHtml(r.symbol)} ${escapeHtml(r.timeframe)}</td>
+        <td><span class="status-label ${r.validation_tier === 'VALIDATED' ? 'text-pos' : 'text-warn'}">${escapeHtml(r.validation_tier)}</span></td>
+        <td class="num">${r.composite_score.toFixed(2)}</td>
+        <td class="num">${r.sharpe_ratio.toFixed(2)}</td>
+        <td class="num">${r.profit_factor.toFixed(2)}</td>
+        <td class="num">${r.win_rate.toFixed(1)}%</td>
+        <td class="num text-neg">-${r.max_drawdown_pct.toFixed(1)}%</td>
+        <td class="num">${r.total_trades}</td>
+        <td class="num">${r.pbo_score !== null ? r.pbo_score.toFixed(2) : '-'} / ${r.deflated_sharpe !== null ? r.deflated_sharpe.toFixed(2) : '-'}</td>
+        <td style="white-space:nowrap;">
+          <a href="/backtesting?experiment_id=${r.experiment_id}&autorun=1" class="btn btn-secondary btn-sm">Backtest</a>
+          <a href="/validation?experiment_id=${r.experiment_id}" class="btn btn-primary btn-sm">Validate</a>
+          <a href="/paper-trading?experiment_id=${r.experiment_id}" class="btn btn-secondary btn-sm">Paper</a>
+          <a href="/api/experiments/${r.experiment_id}/export.json" class="btn btn-secondary btn-sm">JSON</a>
+          <a href="/api/experiments/${r.experiment_id}/export.csv" class="btn btn-secondary btn-sm">CSV</a>
+        </td>
+      </tr>
+    `).join("");
+  } catch (err) {
+    showNotice("lb-notice", err.message, "error");
+    document.getElementById("lb-tbody").innerHTML = "";
+  } finally {
+    if (e) setButtonLoading(btn, false);
+  }
+  return false;
+}
+document.addEventListener("DOMContentLoaded", () => loadLeaderboard());
+</script>
+{% endblock %}

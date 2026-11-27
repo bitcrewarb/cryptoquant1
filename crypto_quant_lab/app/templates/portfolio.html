@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Portfolio Lab</h1>
+    <p class="page-subtitle">Step 06 · Construct diversified multi-strategy portfolios using return/drawdown correlation matrices, hierarchical clustering, and institutional risk parity.</p>
+  </div>
+</div>
+
+<div id="port-processing" class="cql-processing-panel"></div>
+<div id="port-notice" class="notice-bar" style="display:none;"></div>
+
+<section class="panel">
+  <div class="panel-header"><h2 class="panel-title">Portfolio Optimizer</h2></div>
+  {% if experiments %}
+  <form onsubmit="return buildPortfolio(event)">
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div class="field">
+        <label for="port-name">Portfolio Name</label>
+        <input id="port-name" type="text" value="Core Multi-Regime Alpha" required />
+      </div>
+      <div class="field">
+        <label for="port-method">Allocation Method</label>
+        <select id="port-method">
+          <option value="risk_parity">Risk Parity</option>
+          <option value="min_variance">Minimum Variance</option>
+          <option value="volatility_weighted">Volatility-Based Weighting</option>
+          <option value="sharpe_weighted">Sharpe-Based Allocation</option>
+          <option value="max_dd_constrained">Max Drawdown Constrained</option>
+          <option value="equal_weight">Equal Weight</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="port-cap">Initial Capital (USDT)</label>
+        <input id="port-cap" type="number" value="100000" min="1000" />
+      </div>
+      <div class="field">
+        <label for="port-maxw">Max Single Strategy Weight</label>
+        <input id="port-maxw" type="number" value="0.40" step="0.05" min="0.1" max="1.0" />
+      </div>
+      <div>
+        <button id="port-submit-btn" type="submit" class="btn btn-primary" style="width:100%;">Optimize Portfolio</button>
+      </div>
+    </div>
+
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">Select Candidate Strategies (check 2+ strategies to diversify)</div>
+    <div style="max-height:190px;overflow-y:auto;border:1px solid var(--border-hairline);border-radius:6px;padding:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;">
+      {% for item in experiments %}
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
+        <input type="checkbox" class="port-exp-chk" value="{{ item.exp.id }}" {% if loop.index <= 4 %}checked{% endif %} />
+        <span>{{ item.strat.name }} · {{ item.ds.symbol }} {{ item.ds.timeframe }} ({{ item.exp.validation_tier }})</span>
+      </label>
+      {% endfor %}
+    </div>
+  </form>
+  {% else %}
+    <div class="empty-state">
+      <p>No strategy experiments available yet. Discover and validate candidate strategies first.</p>
+      <a href="/discovery" class="btn btn-primary btn-sm">03. Launch Discovery</a>
+    </div>
+  {% endif %}
+</section>
+
+<div id="port-output" style="display:none;">
+  <div class="kpi-grid" id="port-kpis"></div>
+  <div class="two-col-grid">
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Portfolio Equity Curve</h2></div>
+      <div id="port-eq-chart" class="chart-box"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Return Correlation Heatmap</h2></div>
+      <div id="port-corr-chart" class="chart-box"></div>
+    </section>
+  </div>
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Optimal Weights, Clusters &amp; Risk Contribution</h2></div>
+    <div id="port-alloc-table" class="table-wrap"></div>
+  </section>
+</div>
+
+<section class="panel">
+  <div class="panel-header"><h2 class="panel-title">Saved Portfolios</h2></div>
+  {% if saved_portfolios %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Portfolio Name</th>
+            <th>Allocation Method</th>
+            <th class="num">Capital</th>
+            <th class="num">Return %</th>
+            <th class="num">Sharpe</th>
+            <th class="num">Max DD %</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sp in saved_portfolios %}
+          {% set m = sp.metrics_json or {} %}
+          <tr>
+            <td style="font-weight:600;">{{ sp.name }}</td>
+            <td class="mono">{{ sp.allocation_method }}</td>
+            <td class="num">${{ "{:,.0f}".format(sp.initial_capital) }}</td>
+            <td class="num">{{ "%.2f"|format(m.get("total_return_pct", 0.0)) }}%</td>
+            <td class="num">{{ "%.2f"|format(m.get("sharpe_ratio", 0.0)) }}</td>
+            <td class="num text-neg">-{{ "%.2f"|format(m.get("max_drawdown_pct", 0.0)) }}%</td>
+            <td class="mono text-muted" style="font-size:12px;">{{ sp.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">No saved portfolios yet.</div>
+  {% endif %}
+</section>
+
+<script>
+async function buildPortfolio(e) {
+  e.preventDefault();
+  const ids = Array.from(document.querySelectorAll(".port-exp-chk:checked")).map(x => parseInt(x.value, 10));
+  if (!ids.length) return showNotice("port-notice", "Select at least 1 strategy experiment.", "error");
+  const btn = document.getElementById("port-submit-btn");
+
+  hideNotice("port-notice");
+  setButtonLoading(btn, true, "Optimizing...");
+  showProcessing("port-processing", `Optimizing portfolio across ${ids.length} strategy return streams`, [
+    "Computing aligned equity & drawdown return matrices",
+    "Ward hierarchical clustering & correlation estimation",
+    "Solving optimal weights & risk contributions"
+  ]);
+
+  try {
+    const res = await apiJson("/api/portfolio/construct", "POST", {
+      name: document.getElementById("port-name").value,
+      experiment_ids: ids,
+      allocation_method: document.getElementById("port-method").value,
+      initial_capital: parseFloat(document.getElementById("port-cap").value),
+      max_single_weight: parseFloat(document.getElementById("port-maxw").value),
+    });
+    document.getElementById("port-output").style.display = "block";
+    showNotice("port-notice", `Saved optimized portfolio "${res.name}" across ${res.allocations.length} strategies.`, "success");
+
+    const m = res.metrics;
+    document.getElementById("port-kpis").innerHTML = `
+      <div class="kpi-card"><div class="kpi-label">Portfolio Equity</div><div class="kpi-value">$${m.final_equity.toLocaleString()}</div><div class="kpi-meta">Return: ${m.total_return_pct}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Portfolio Sharpe</div><div class="kpi-value">${m.sharpe_ratio}</div><div class="kpi-meta">Vol Scale: ${res.vol_scale}x</div></div>
+      <div class="kpi-card"><div class="kpi-label">Portfolio Max DD</div><div class="kpi-value text-neg">-${m.max_drawdown_pct}%</div><div class="kpi-meta">Ann. Vol: ${m.annualized_vol_pct}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Strategies / Method</div><div class="kpi-value">${res.allocations.length}</div><div class="kpi-meta">${escapeHtml(res.allocation_method)}</div></div>
+    `;
+    Plotly.newPlot("port-eq-chart", [{ y: res.equity_curve, type: "scatter", mode: "lines", line: { color: "#10b981", width: 2 }, name: "Portfolio Equity" }], plotlyDarkLayout("Diversified Portfolio Equity", "Equity (USDT)"), { responsive: true });
+    const labels = res.allocations.map(a => a.name.slice(0, 18));
+    Plotly.newPlot("port-corr-chart", [{
+      z: res.return_correlation_matrix, x: labels, y: labels, type: "heatmap", colorscale: "RdBu", zmin: -1, zmax: 1
+    }], plotlyDarkLayout("Strategy Return Correlation Matrix"), { responsive: true });
+    document.getElementById("port-alloc-table").innerHTML = `
+      <table class="data-table"><thead><tr><th>Strategy</th><th class="num">Cluster</th><th class="num">Weight %</th><th class="num">Risk Contribution %</th></tr></thead>
+      <tbody>${res.allocations.map(a => `
+        <tr><td>${escapeHtml(a.name)}</td><td class="num">Cluster ${a.cluster_id}</td><td class="num">${a.weight_pct}%</td><td class="num">${a.risk_contribution_pct}%</td></tr>
+      `).join("")}</tbody></table>
+    `;
+  } catch (err) {
+    showNotice("port-notice", err.message, "error");
+  } finally {
+    hideProcessing("port-processing");
+    setButtonLoading(btn, false);
+  }
+  return false;
+}
+</script>
+{% endblock %}

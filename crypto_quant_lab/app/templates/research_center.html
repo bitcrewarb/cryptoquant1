@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Quant Research Center</h1>
+    <p class="page-subtitle">Step 02 · Statistical diagnostics (ADF, KPSS, Hurst, Entropy, GARCH(1,1), Engle-Granger Cointegration), SMC/ICT/PA signal counts, and causal Market Regimes.</p>
+  </div>
+  <div id="res-next-cta" style="display:none;gap:10px;">
+    <a id="res-discover-link" href="/discovery" class="btn btn-primary">Next: 03. Discover Strategies on Dataset</a>
+  </div>
+</div>
+
+<div id="research-processing" class="cql-processing-panel"></div>
+<div id="research-notice" class="notice-bar" style="display:none;"></div>
+
+<div class="two-col-grid">
+  <section class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Run Quantitative &amp; Regime Analysis</h2>
+    </div>
+    <form class="form-grid" onsubmit="return runAnalysis(event)">
+      <div class="field">
+        <label for="res-ds">Dataset</label>
+        <select id="res-ds">
+          {% for d in datasets %}
+            <option value="{{ d.id }}" {% if selected_dataset_id == d.id %}selected{% endif %}>{{ d.symbol }} {{ d.timeframe }} ({{ d.market_type }} v{{ d.version }} · {{ d.candle_count }} bars)</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="res-bars">Lookback Bars</label>
+        <input id="res-bars" type="number" value="500" min="100" max="5000" />
+      </div>
+      <div class="field">
+        <label for="res-hmm">Regime Model</label>
+        <select id="res-hmm">
+          <option value="false">Rule-Based Causal Classifier</option>
+          <option value="true">Causal + Gaussian Mixture Smoothing</option>
+        </select>
+      </div>
+      <div>
+        <button id="res-submit-btn" type="submit" class="btn btn-primary" style="width:100%;">Analyze Dataset</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Engle-Granger Pairs Cointegration Test</h2>
+    </div>
+    <form class="form-grid" onsubmit="return runCointegration(event)">
+      <div class="field">
+        <label for="coint-a">Asset A</label>
+        <select id="coint-a">
+          {% for d in datasets %}
+            <option value="{{ d.id }}">{{ d.symbol }} {{ d.timeframe }} (v{{ d.version }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="coint-b">Asset B</label>
+        <select id="coint-b">
+          {% for d in datasets %}
+            <option value="{{ d.id }}" {% if loop.index == 2 %}selected{% endif %}>{{ d.symbol }} {{ d.timeframe }} (v{{ d.version }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <button id="coint-submit-btn" type="submit" class="btn btn-secondary" style="width:100%;">Test Cointegration</button>
+      </div>
+    </form>
+    <div id="coint-output" class="text-muted mono" style="margin-top:12px;font-size:12px;"></div>
+  </section>
+</div>
+
+<div id="research-results" style="display:none;">
+  <div class="kpi-grid" id="stat-kpis"></div>
+  <section class="panel">
+    <div class="panel-header"><h2 class="panel-title">Price, Kalman Filter &amp; Causal Market Regimes</h2></div>
+    <div id="chart-price-regime" class="chart-box"></div>
+  </section>
+  <div class="two-col-grid">
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">GARCH(1,1) Conditional Volatility &amp; RSI(14)</h2></div>
+      <div id="chart-vol-rsi" class="chart-box"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Market Regime &amp; SMC/ICT/PA Signal Breakdown</h2></div>
+      <div id="signal-summary" class="table-wrap"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+async function runAnalysis(e) {
+  if (e) e.preventDefault();
+  const dsEl = document.getElementById("res-ds");
+  if (!dsEl.value) return showNotice("research-notice", "Download a dataset first in Market Data Center.", "error");
+  const btn = document.getElementById("res-submit-btn");
+  const dsId = parseInt(dsEl.value, 10);
+  const bars = parseInt(document.getElementById("res-bars").value, 10);
+
+  hideNotice("research-notice");
+  setButtonLoading(btn, true, "Analyzing...");
+  showProcessing("research-processing", `Running quantitative diagnostics on ${bars} bars`, [
+    "ADF & KPSS stationarity + Hurst & Shannon Entropy",
+    "GARCH(1,1) MLE conditional volatility & 1D Kalman state",
+    "SMC, ICT & Price Action structural signals",
+    "10-state causal Market Regime classification"
+  ]);
+
+  try {
+    const res = await apiJson("/api/research/analyze", "POST", {
+      dataset_id: dsId,
+      tail_bars: bars,
+      use_hmm: document.getElementById("res-hmm").value === "true",
+    });
+    document.getElementById("research-results").style.display = "block";
+    document.getElementById("res-next-cta").style.display = "flex";
+    document.getElementById("res-discover-link").href = `/discovery?dataset_id=${dsId}`;
+    showNotice("research-notice", `Analyzed ${res.bars} bars of ${res.symbol} ${res.timeframe}.`, "success");
+
+    const s = res.statistics;
+    document.getElementById("stat-kpis").innerHTML = `
+      <div class="kpi-card"><div class="kpi-label">Hurst Exponent</div><div class="kpi-value">${s.hurst_exponent}</div><div class="kpi-meta">${s.hurst_exponent > 0.55 ? "Trending persistence" : s.hurst_exponent < 0.45 ? "Mean-reverting" : "Random walk region"} · Entropy ${s.shannon_entropy}</div></div>
+      <div class="kpi-card"><div class="kpi-label">ADF / KPSS p-value</div><div class="kpi-value">${s.adf_pvalue} / ${s.kpss_pvalue}</div><div class="kpi-meta">Returns stationary: ${s.is_stationary_returns}</div></div>
+      <div class="kpi-card"><div class="kpi-label">GARCH(1,1) Persistence</div><div class="kpi-value">${s.garch_persistence}</div><div class="kpi-meta">alpha=${s.garch_alpha} · beta=${s.garch_beta}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Volume Profile POC</div><div class="kpi-value">${s.volume_profile.poc}</div><div class="kpi-meta">VAL ${s.volume_profile.val} · VAH ${s.volume_profile.vah}</div></div>
+    `;
+
+    const xs = res.series.timestamps_ms.map(t => new Date(t).toISOString());
+    Plotly.newPlot("chart-price-regime", [
+      { x: xs, y: res.series.close, name: "Close", line: { color: "#e2e8f0", width: 1.5 }, text: res.series.regimes, hovertemplate: "%{y:.2f}<br>Regime: %{text}<extra></extra>" },
+      { x: xs, y: res.series.ema20, name: "EMA 20", line: { color: "#10b981", width: 1.2 } },
+      { x: xs, y: res.series.ema50, name: "EMA 50", line: { color: "#38bdf8", width: 1.2 } },
+      { x: xs, y: res.series.kalman, name: "Kalman Filter", line: { color: "#f59e0b", width: 1.2, dash: "dot" } }
+    ], plotlyDarkLayout(`${res.symbol} ${res.timeframe} — Price, EMA & Kalman State`, "Price (USDT)"), { responsive: true });
+
+    Plotly.newPlot("chart-vol-rsi", [
+      { x: xs.slice(1), y: res.series.garch_vol, name: "GARCH(1,1) Ann. Vol", line: { color: "#f59e0b", width: 1.5 } },
+      { x: xs, y: res.series.rsi14, name: "RSI(14)", yaxis: "y2", line: { color: "#38bdf8", width: 1.1 } }
+    ], {
+      ...plotlyDarkLayout("GARCH(1,1) Volatility & RSI(14)", "Volatility"),
+      yaxis2: { title: "RSI", overlaying: "y", side: "right", range: [0, 100], gridcolor: "transparent" }
+    }, { responsive: true });
+
+    const regRows = Object.entries(res.regime_distribution).map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td class="num">${v}</td></tr>`).join("");
+    const sigRows = Object.entries(res.signal_counts).map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td class="num">${v}</td></tr>`).join("");
+    document.getElementById("signal-summary").innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Detected Component / Regime</th><th class="num">Bars / Signals</th></tr></thead>
+        <tbody>${regRows}${sigRows}</tbody>
+      </table>
+    `;
+  } catch (err) {
+    showNotice("research-notice", err.message, "error");
+  } finally {
+    hideProcessing("research-processing");
+    setButtonLoading(btn, false);
+  }
+  return false;
+}
+
+async function runCointegration(e) {
+  e.preventDefault();
+  const btn = document.getElementById("coint-submit-btn");
+  setButtonLoading(btn, true, "Testing...");
+  try {
+    const res = await apiJson("/api/research/cointegration", "POST", {
+      dataset_a_id: parseInt(document.getElementById("coint-a").value, 10),
+      dataset_b_id: parseInt(document.getElementById("coint-b").value, 10),
+    });
+    const c = res.cointegration;
+    document.getElementById("coint-output").textContent =
+      `${res.pair} (${res.overlapping_bars} bars) | Engle-Granger p=${c.pvalue.toFixed(4)} | Cointegrated: ${c.is_cointegrated} | Hedge Ratio: ${c.hedge_ratio.toFixed(4)} | Return Corr r=${res.return_correlation.pearson_r.toFixed(3)}`;
+  } catch (err) {
+    showNotice("research-notice", err.message, "error");
+  } finally {
+    setButtonLoading(btn, false);
+  }
+  return false;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  {% if autorun == 1 and datasets %}
+    runAnalysis();
+  {% endif %}
+});
+</script>
+{% endblock %}

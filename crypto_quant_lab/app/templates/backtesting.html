@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Backtesting Center</h1>
+    <p class="page-subtitle">Step 04 · Event-driven or vectorized simulation with realistic fees, slippage, leverage, conservative OHLC ordering, and 26 metrics.</p>
+  </div>
+  <div id="bt-next-cta" style="display:none;gap:10px;flex-wrap:wrap;">
+    <a id="bt-validate-link" href="/validation" class="btn btn-primary">Next: 05. Validate Strategy</a>
+    <a id="bt-paper-link" href="/paper-trading" class="btn btn-secondary">Deploy Paper</a>
+    <a id="bt-json-link" href="#" class="btn btn-secondary">JSON</a>
+    <a id="bt-csv-link" href="#" class="btn btn-secondary">CSV</a>
+  </div>
+</div>
+
+<div id="bt-processing" class="cql-processing-panel"></div>
+<div id="bt-notice" class="notice-bar" style="display:none;"></div>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Simulation Configuration</h2>
+  </div>
+  <form class="form-grid" onsubmit="return runBacktest(event)">
+    <div class="field">
+      <label for="bt-exp">Strategy Experiment</label>
+      <select id="bt-exp" required>
+        {% for item in experiments %}
+          <option value="{{ item.exp.id }}" {% if selected_experiment_id == item.exp.id %}selected{% endif %}>{{ item.strat.name }} ({{ item.ds.symbol }} {{ item.ds.timeframe }} · {{ item.exp.validation_tier }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="bt-ds">Dataset Override</label>
+      <select id="bt-ds">
+        <option value="">Use Experiment Dataset</option>
+        {% for d in datasets %}
+          <option value="{{ d.id }}" {% if selected_dataset_id == d.id %}selected{% endif %}>{{ d.symbol }} {{ d.timeframe }} ({{ d.market_type }} v{{ d.version }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="bt-engine">Engine Mode</label>
+      <select id="bt-engine">
+        <option value="event_driven">Event-Driven Simulator</option>
+        <option value="vectorized">Vectorized Screening Engine</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="bt-cap">Initial Capital (USDT)</label>
+      <input id="bt-cap" type="number" value="100000" min="100" />
+    </div>
+    <div class="field">
+      <label for="bt-fee">Taker Fee (bps)</label>
+      <input id="bt-fee" type="number" value="10" step="0.5" min="0" />
+    </div>
+    <div class="field">
+      <label for="bt-slip">Slippage (bps)</label>
+      <input id="bt-slip" type="number" value="3" step="0.5" min="0" />
+    </div>
+    <div class="field">
+      <label for="bt-lev">Leverage</label>
+      <input id="bt-lev" type="number" value="1" step="0.5" min="1" max="20" />
+    </div>
+    <div class="field">
+      <label for="bt-start">Start Date (Optional)</label>
+      <input id="bt-start" type="date" />
+    </div>
+    <div class="field">
+      <label for="bt-end">End Date (Optional)</label>
+      <input id="bt-end" type="date" />
+    </div>
+    <div>
+      <button id="bt-submit-btn" type="submit" class="btn btn-primary" style="width:100%;">Execute Backtest</button>
+    </div>
+  </form>
+</section>
+
+<div id="bt-output" style="display:none;">
+  <div class="kpi-grid" id="bt-kpis"></div>
+  <div class="two-col-grid">
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Equity Curve</h2></div>
+      <div id="bt-equity-chart" class="chart-box"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Underwater Drawdown Profile</h2></div>
+      <div id="bt-dd-chart" class="chart-box"></div>
+    </section>
+  </div>
+  <div class="two-col-grid">
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">All Performance Metrics</h2></div>
+      <div id="bt-metrics-table" class="table-wrap"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-header"><h2 class="panel-title">Executed Trades Ledger (Latest 100)</h2></div>
+      <div id="bt-trades-table" class="table-wrap" style="max-height:460px;overflow-y:auto;"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+async function runBacktest(e) {
+  if (e) e.preventDefault();
+  const expEl = document.getElementById("bt-exp");
+  if (!expEl.value) return showNotice("bt-notice", "Run Strategy Discovery first to generate candidate strategies.", "error");
+  const btn = document.getElementById("bt-submit-btn");
+  const expId = parseInt(expEl.value, 10);
+  const dsOverride = document.getElementById("bt-ds").value;
+  const engine = document.getElementById("bt-engine").value;
+
+  hideNotice("bt-notice");
+  setButtonLoading(btn, true, "Simulating...");
+  showProcessing("bt-processing", `Running ${engine} backtest simulation`, [
+    "Reconstructing causal indicators & AST signals",
+    "Simulating bar-by-bar fills, fees, slippage & conservative SL/TP",
+    "Computing 26 quantitative performance metrics"
+  ]);
+
+  try {
+    const res = await apiJson("/api/backtest/run", "POST", {
+      experiment_id: expId,
+      dataset_id: dsOverride ? parseInt(dsOverride, 10) : null,
+      engine_type: engine,
+      initial_capital: parseFloat(document.getElementById("bt-cap").value),
+      taker_fee_bps: parseFloat(document.getElementById("bt-fee").value),
+      maker_fee_bps: parseFloat(document.getElementById("bt-fee").value) * 0.5,
+      slippage_bps: parseFloat(document.getElementById("bt-slip").value),
+      leverage: parseFloat(document.getElementById("bt-lev").value),
+      start_date: document.getElementById("bt-start").value || null,
+      end_date: document.getElementById("bt-end").value || null,
+    });
+    document.getElementById("bt-output").style.display = "block";
+    document.getElementById("bt-next-cta").style.display = "flex";
+    document.getElementById("bt-validate-link").href = `/validation?experiment_id=${expId}`;
+    document.getElementById("bt-paper-link").href = `/paper-trading?experiment_id=${expId}`;
+    document.getElementById("bt-json-link").href = `/api/experiments/${expId}/export.json`;
+    document.getElementById("bt-csv-link").href = `/api/experiments/${expId}/export.csv`;
+
+    const m = res.metrics;
+    showNotice("bt-notice", `Backtest #${res.backtest_id} completed for ${res.strategy_name} (${m.total_trades} trades, Sharpe ${m.sharpe_ratio}).`, "success");
+
+    document.getElementById("bt-kpis").innerHTML = `
+      <div class="kpi-card"><div class="kpi-label">Net Profit / ROC</div><div class="kpi-value ${m.net_profit >= 0 ? 'text-pos' : 'text-neg'}">$${m.net_profit.toLocaleString()}</div><div class="kpi-meta">${m.return_on_capital_pct}% return · Ann. ${m.annualized_return_pct}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Sharpe / Sortino</div><div class="kpi-value">${m.sharpe_ratio} / ${m.sortino_ratio}</div><div class="kpi-meta">Calmar: ${m.calmar_ratio} · Recovery: ${m.recovery_factor}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Max Drawdown</div><div class="kpi-value text-neg">-${m.max_drawdown_pct}%</div><div class="kpi-meta">Avg DD: ${m.avg_drawdown_pct}% · Ulcer: ${m.ulcer_index}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Win Rate / PF</div><div class="kpi-value">${m.win_rate}% / ${m.profit_factor}</div><div class="kpi-meta">${m.total_trades} trades · Exp $${m.expectancy}</div></div>
+    `;
+
+    const xs = res.equity_curve.map(p => new Date(p.t).toISOString());
+    const ys = res.equity_curve.map(p => p.equity);
+    let pk = 0;
+    const dds = ys.map(v => { pk = Math.max(pk, v); return pk > 0 ? -((pk - v) / pk * 100) : 0; });
+
+    Plotly.newPlot("bt-equity-chart", [{ x: xs, y: ys, type: "scatter", mode: "lines", line: { color: "#10b981", width: 2 }, name: "Equity" }], plotlyDarkLayout(`${res.strategy_name} (${res.engine_type})`, "Equity (USDT)"), { responsive: true });
+    Plotly.newPlot("bt-dd-chart", [
+      { x: xs, y: dds, type: "scatter", fill: "tozeroy", line: { color: "#ef4444", width: 1.5 }, name: "Drawdown %" }
+    ], plotlyDarkLayout("Drawdown Profile (%)", "Drawdown %"), { responsive: true });
+
+    const metricKeys = Object.entries(m).filter(([, v]) => typeof v !== "object");
+    document.getElementById("bt-metrics-table").innerHTML = `
+      <table class="data-table"><thead><tr><th>Metric</th><th class="num">Value</th></tr></thead>
+      <tbody>${metricKeys.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td class="num">${escapeHtml(v)}</td></tr>`).join("")}</tbody></table>
+    `;
+    document.getElementById("bt-trades-table").innerHTML = res.trades.length
+      ? `
+        <table class="data-table"><thead><tr><th>Side</th><th class="num">Entry</th><th class="num">Exit</th><th class="num">Net PnL</th><th>Reason</th><th>Regime</th></tr></thead>
+        <tbody>${res.trades.slice(0, 100).map(t => `
+          <tr>
+            <td class="mono">${escapeHtml(t.side)}</td>
+            <td class="num">${t.entry_price}</td>
+            <td class="num">${t.exit_price}</td>
+            <td class="num ${t.net_pnl >= 0 ? 'text-pos' : 'text-neg'}">${t.net_pnl}</td>
+            <td>${escapeHtml(t.exit_reason)}</td>
+            <td class="text-muted">${escapeHtml(t.regime)}</td>
+          </tr>`).join("")}</tbody></table>`
+      : '<div class="empty-state">No trades triggered on this dataset/date range.</div>';
+  } catch (err) {
+    showNotice("bt-notice", err.message, "error");
+  } finally {
+    hideProcessing("bt-processing");
+    setButtonLoading(btn, false);
+  }
+  return false;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  {% if autorun == 1 and experiments %}
+    runBacktest();
+  {% endif %}
+});
+</script>
+{% endblock %}

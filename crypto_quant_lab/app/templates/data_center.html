@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Market Data Center</h1>
+    <p class="page-subtitle">Step 01 · Paginated Binance Spot &amp; USDT-M Futures historical OHLCV, derivatives metrics, Parquet versioning, and data quality audits.</p>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <a href="/research" class="btn btn-secondary">Next: 02. Quant Research</a>
+    <a href="/discovery" class="btn btn-primary">03. Strategy Discovery</a>
+  </div>
+</div>
+
+<div id="data-processing" class="cql-processing-panel"></div>
+<div id="data-notice" class="notice-bar" style="display:none;"></div>
+
+<div class="two-col-grid">
+  <section class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Download Historical OHLCV Dataset</h2>
+    </div>
+    <form id="download-form" class="form-grid" onsubmit="return submitDownload(event)">
+      <div class="field">
+        <label for="dl-symbol">Symbol</label>
+        <select id="dl-symbol">
+          {% for a in assets %}
+            <option value="{{ a.symbol }}|{{ a.market_type }}">{{ a.symbol }} ({{ a.market_type }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="dl-tf">Timeframe</label>
+        <select id="dl-tf">
+          {% for tf in timeframes %}
+            <option value="{{ tf }}" {% if tf == '1h' %}selected{% endif %}>{{ tf }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="dl-candles">Candle Count</label>
+        <input id="dl-candles" type="number" value="2500" min="100" max="50000" />
+      </div>
+      <div class="field">
+        <label for="dl-mode">Execution</label>
+        <select id="dl-mode">
+          <option value="sync">Immediate Sync</option>
+          <option value="background">Background Job</option>
+        </select>
+      </div>
+      <div>
+        <button id="dl-submit-btn" type="submit" class="btn btn-primary" style="width:100%;">Download from Binance</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Register Symbol &amp; Sync Derivatives</h2>
+    </div>
+    <form class="form-grid" onsubmit="return registerAsset(event)" style="margin-bottom:14px;">
+      <div class="field">
+        <label for="new-symbol">New Binance Pair</label>
+        <input id="new-symbol" type="text" placeholder="AVAXUSDT" required />
+      </div>
+      <div class="field">
+        <label for="new-mkt">Market</label>
+        <select id="new-mkt">
+          <option value="spot">Spot</option>
+          <option value="futures">USDT-M Futures</option>
+        </select>
+      </div>
+      <div>
+        <button id="reg-submit-btn" type="submit" class="btn btn-secondary" style="width:100%;">Add Symbol</button>
+      </div>
+    </form>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <select id="deriv-symbol" style="min-width:150px;">
+        <option value="BTCUSDT">BTCUSDT</option>
+        <option value="ETHUSDT">ETHUSDT</option>
+        <option value="SOLUSDT">SOLUSDT</option>
+      </select>
+      <button id="deriv-btn" type="button" class="btn btn-secondary" onclick="syncDerivatives(this)">Sync Funding, OI &amp; Order Book</button>
+    </div>
+    <div id="deriv-summary" class="text-muted mono" style="margin-top:10px;font-size:12px;"></div>
+  </section>
+</div>
+
+<section id="dl-jobs-panel" class="panel" style="display:none;">
+  <div class="panel-header">
+    <h2 class="panel-title">Active &amp; Recent Download Jobs</h2>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="refreshDownloadJobs()">Refresh</button>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Job ID</th><th>Symbol / TF</th><th>Status</th><th class="num">Progress</th></tr></thead>
+      <tbody id="dl-jobs-tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">Stored Versioned Parquet Datasets</h2>
+    <div class="panel-actions">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="location.reload()">Refresh</button>
+    </div>
+  </div>
+  {% if datasets %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Market</th>
+            <th>TF</th>
+            <th class="num">Ver</th>
+            <th>Coverage (UTC)</th>
+            <th class="num">Candles</th>
+            <th class="num">Missing</th>
+            <th>Quality</th>
+            <th class="num">Size</th>
+            <th>Data Ops</th>
+            <th>Next Workflow</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in datasets %}
+          <tr id="ds-row-{{ d.id }}">
+            <td style="font-weight:600;">{{ d.symbol }}</td>
+            <td>{{ d.market_type }}</td>
+            <td class="mono">{{ d.timeframe }}</td>
+            <td class="num">v{{ d.version }}</td>
+            <td class="mono" style="font-size:12px;">
+              {% if d.start_time and d.end_time %}
+                {{ d.start_time.strftime('%Y-%m-%d') }} to {{ d.end_time.strftime('%Y-%m-%d %H:%M') }}
+              {% else %}
+                Empty
+              {% endif %}
+            </td>
+            <td class="num">{{ "{:,}".format(d.candle_count) }}</td>
+            <td class="num {% if d.missing_candles > 0 %}text-warn{% endif %}">{{ d.missing_candles }}</td>
+            <td>
+              <span class="status-label {% if d.quality_status == 'verified' %}text-pos{% elif d.quality_status == 'warnings' %}text-warn{% else %}text-neg{% endif %}">
+                {{ d.quality_status.upper() }}
+              </span>
+            </td>
+            <td class="num">{{ "%.1f"|format(d.storage_bytes / 1024) }} KB</td>
+            <td style="white-space:nowrap;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="inspectDataset({{ d.id }}, this)">Chart</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="updateDataset({{ d.id }}, this)">Update</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="validateDataset({{ d.id }}, false, this)">Validate</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="validateDataset({{ d.id }}, true, this)">Repair</button>
+              <button type="button" class="btn btn-danger btn-sm" onclick="deleteDataset({{ d.id }}, this)">Delete</button>
+            </td>
+            <td style="white-space:nowrap;">
+              <a href="/research?dataset_id={{ d.id }}&autorun=1" class="btn btn-secondary btn-sm">Research</a>
+              <a href="/discovery?dataset_id={{ d.id }}" class="btn btn-primary btn-sm">Discover</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">No historical datasets downloaded yet. Use the form above to fetch real OHLCV candles from Binance.</div>
+  {% endif %}
+</section>
+
+<section id="ds-preview-panel" class="panel" style="display:none;">
+  <div class="panel-header">
+    <h2 id="ds-preview-title" class="panel-title">Dataset OHLCV Preview</h2>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('ds-preview-panel').style.display='none'">Close Chart</button>
+  </div>
+  <div id="ds-preview-chart" class="chart-box"></div>
+</section>
+
+<script>
+let _dlPollTimer = null;
+
+async function submitDownload(e) {
+  e.preventDefault();
+  const btn = document.getElementById("dl-submit-btn");
+  const [symbol, market_type] = document.getElementById("dl-symbol").value.split("|");
+  const timeframe = document.getElementById("dl-tf").value;
+  const max_candles = parseInt(document.getElementById("dl-candles").value, 10);
+  const background = document.getElementById("dl-mode").value === "background";
+  setButtonLoading(btn, true, "Downloading...");
+  showProcessing("data-processing", `Fetching ${max_candles.toLocaleString()} ${symbol} (${market_type} ${timeframe}) candles from Binance`, [
+    "Paginating Binance REST API",
+    "Auditing OHLCV continuity & MAD outliers",
+    "Writing versioned Parquet store"
+  ]);
+  try {
+    const res = await apiJson("/api/data/download", "POST", { symbol, timeframe, market_type, max_candles, background });
+    if (res.mode === "background") {
+      hideProcessing("data-processing");
+      showNotice("data-notice", `Background download job ${res.job_uid} started. Tracking live progress below.`, "info");
+      startDownloadJobPolling();
+    } else {
+      showNotice("data-notice", `Downloaded ${res.candle_count.toLocaleString()} candles for ${res.symbol} ${res.timeframe} (quality: ${res.quality_status}).`, "success");
+      setTimeout(() => location.reload(), 600);
+    }
+  } catch (err) {
+    showNotice("data-notice", err.message, "error");
+  } finally {
+    hideProcessing("data-processing");
+    setButtonLoading(btn, false);
+  }
+  return false;
+}
+
+async function refreshDownloadJobs() {
+  try {
+    const jobs = await apiJson("/api/jobs?job_type=data_download", "GET", null, { showTopLoader: false });
+    const panel = document.getElementById("dl-jobs-panel");
+    const tbody = document.getElementById("dl-jobs-tbody");
+    if (!jobs.length) {
+      panel.style.display = "none";
+      return false;
+    }
+    const recent = jobs.slice(0, 6);
+    const hasActive = recent.some(j => j.status === "running" || j.status === "queued");
+    panel.style.display = "block";
+    tbody.innerHTML = recent.map(j => {
+      const cfg = j.config || {};
+      return `
+        <tr>
+          <td class="mono">${escapeHtml(j.job_uid)}</td>
+          <td class="mono">${escapeHtml(cfg.symbol || "")} ${escapeHtml(cfg.timeframe || "")} (${escapeHtml(cfg.market_type || "spot")})</td>
+          <td><span class="status-label ${j.status === 'completed' ? 'text-pos' : j.status === 'failed' ? 'text-neg' : 'text-warn'}">${j.status.toUpperCase()}</span></td>
+          <td class="num">
+            <div>${j.progress_pct}% (${j.completed_items}/${j.total_items})</div>
+            <div class="cql-progress-track"><div class="cql-progress-fill" style="width:${Math.min(100, j.progress_pct)}%;"></div></div>
+          </td>
+        </tr>`;
+    }).join("");
+    return hasActive;
+  } catch {
+    return false;
+  }
+}
+
+function startDownloadJobPolling() {
+  refreshDownloadJobs();
+  if (_dlPollTimer) clearInterval(_dlPollTimer);
+  _dlPollTimer = setInterval(async () => {
+    const active = await refreshDownloadJobs();
+    refreshGlobalJobsIndicator();
+    if (!active) {
+      clearInterval(_dlPollTimer);
+      _dlPollTimer = null;
+      location.reload();
+    }
+  }, 2000);
+}
+
+async function registerAsset(e) {
+  e.preventDefault();
+  const btn = document.getElementById("reg-submit-btn");
+  const symbol = document.getElementById("new-symbol").value.trim().toUpperCase();
+  const market_type = document.getElementById("new-mkt").value;
+  setButtonLoading(btn, true, "Registering...");
+  try {
+    await apiJson("/api/data/assets", "POST", { symbol, market_type });
+    showNotice("data-notice", `Registered ${symbol} (${market_type}).`, "success");
+    setTimeout(() => location.reload(), 500);
+  } catch (err) {
+    showNotice("data-notice", err.message, "error");
+    setButtonLoading(btn, false);
+  }
+  return false;
+}
+
+async function inspectDataset(id, btn) {
+  setButtonLoading(btn, true, "Loading...");
+  try {
+    const res = await apiJson(`/api/data/datasets/${id}/ohlcv?limit=300`);
+    const panel = document.getElementById("ds-preview-panel");
+    panel.style.display = "block";
+    document.getElementById("ds-preview-title").textContent = `${res.symbol} ${res.timeframe} — Latest ${res.candles.length} Candles`;
+    const xs = res.candles.map(c => new Date(c.open_time_ms).toISOString());
+    Plotly.newPlot("ds-preview-chart", [
+      {
+        x: xs,
+        open: res.candles.map(c => c.open),
+        high: res.candles.map(c => c.high),
+        low: res.candles.map(c => c.low),
+        close: res.candles.map(c => c.close),
+        type: "candlestick",
+        name: res.symbol,
+        increasing: { line: { color: "#10b981" } },
+        decreasing: { line: { color: "#ef4444" } },
+      }
+    ], { ...plotlyDarkLayout(`${res.symbol} ${res.timeframe} OHLCV`, "Price (USDT)"), xaxis: { rangeslider: { visible: false }, gridcolor: "#1f2937" } }, { responsive: true });
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } catch (err) {
+    showNotice("data-notice", err.message, "error");
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+async function updateDataset(id, btn) {
+  setButtonLoading(btn, true, "Updating...");
+  try {
+    const res = await apiJson(`/api/data/datasets/${id}/update`, "POST");
+    showNotice("data-notice", `Updated dataset to v${res.version} (${res.candle_count.toLocaleString()} candles).`, "success");
+    setTimeout(() => location.reload(), 600);
+  } catch (err) {
+    showNotice("data-notice", err.message, "error");
+    setButtonLoading(btn, false);
+  }
+}
+
+async function validateDataset(id, repair, btn) {
+  setButtonLoading(btn, true, repair ? "Repairing..." : "Checking...");
+  try {
+    const res = await apiJson(`/api/data/datasets/${id}/validate?repair=${repair}`, "POST");
+    showNotice("data-notice", `Dataset v${res.version} quality: ${res.quality_status} (missing=${res.missing_candles}).`, "success");
+    setTimeout(() => location.reload(), 600);
+  } catch (err) {
+    showNotice("data-notice", err.message, "error");
+    setButtonLoading(btn, false);
+  }
+}
+
+async function deleteDataset(id, btn) {
+  setButtonLoading(btn, true, "Deleting...");
+  try {
+    await apiJson(`/api/data/datasets/${id}`, "DELETE");
+    const row = document.getElementById(`ds-row-${id}`);
+    if (row) row.remove();
+    showNotice("data-notice", `Removed unused dataset #${id}.`, "success");
+  } catch (err) {
+    showNotice("data-notice", err.message, "error");
+    setButtonLoading(btn, false);
+  }
+}
+
+async function syncDerivatives(btn) {
+  const sym = document.getElementById("deriv-symbol").value;
+  setButtonLoading(btn, true, "Syncing...");
+  try {
+    const res = await apiJson(`/api/data/derivatives/${sym}`, "POST");
+    const ob = res.order_book_snapshot;
+    const prem = res.premium_index;
+    document.getElementById("deriv-summary").textContent =
+      `${sym} | Funding inserted: ${res.funding_inserted} | OI inserted: ${res.open_interest_inserted} | Basis: ${prem.basis_bps.toFixed(2)} bps | Spread: ${ob.spread_bps.toFixed(2)} bps | OB Imbalance: ${ob.imbalance.toFixed(3)}`;
+    showNotice("data-notice", `Synced live derivatives & order book snapshot for ${sym}.`, "success");
+  } catch (err) {
+    showNotice("data-notice", err.message, "error");
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  const active = await refreshDownloadJobs();
+  if (active) startDownloadJobPolling();
+});
+</script>
+{% endblock %}

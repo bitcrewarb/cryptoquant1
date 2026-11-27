@@ -1,0 +1,6 @@
+{
+  "name": "CRYPTO QUANT LAB",
+  "description": "Institutional-grade quantitative cryptocurrency strategy research, backtesting, statistical validation, portfolio construction, and paper trading platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
